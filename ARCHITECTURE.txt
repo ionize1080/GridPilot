@@ -1,4 +1,4 @@
-GridPilot：长期架构与扩展约定
+﻿GridPilot：长期架构与扩展约定
 =============================
 
 1. 技术决策
@@ -177,3 +177,21 @@ MinWidth与CTP物理像素不一致造成裁切。旧版本保存的数字不改
 获得完整逻辑宽度；用户可重新拖动调整。
 ColorPalette 使用 WPF 渐变直接绘制 HSV 二维色盘和色相条，保留 HEX 输入；弹出层隶属原控件，
 卸载时关闭，导航/统一工具设置复用。不引入浏览器组件。
+
+
+v0.6 原子透明帧与分类设置
+------------------------
+FocusOverlay 使用 WS_EX_LAYERED / UpdateLayeredWindow 提交单张32位透明位图，不再在
+选择事件中更换窗口Region或调整Form.Opacity。相同几何/颜色签名不调用Present，正常点击
+中的COM忙碌不触发Hide。诊断分开计数 updates / presents / shows / hides，方便验证是否
+存在多余的隐藏重现，而不是只根据静态截图判断闪烁。
+独立的16ms原生检查使用前台窗口、菜单模式、禁用状态及子窗口命中路径检测真实EXCEL7。
+避免Backstage后方的EXCEL7仍带WS_VISIBLE时误判。该检查不依赖Excel可接受COM调用。
+在同进程不同XLMAIN窗口间允许重新获取活动工作簿的owner；不接管其他Excel进程。
+顶向下32位DIB与DC在同一窗口/尺寸下复用，只擦除旧色带并填充新色带；尺寸改变或窗口释放
+时回收GDI对象，避免每次分配整屏位图。覆盖层继续鼠标穿透、不激活、不修改工作簿。
+
+PreferencesWindow 从 ToolUi 中独立出来，维护分类到内容区域的映射；分类导航与滚动位置
+双向同步，所有卡片共用同一ScrollViewer与偏好对象。外观设置变化即时更新资源字典，
+关闭时解除订阅；不创建浏览器，不更改既有配置文件格式。
+参考：https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-updatelayeredwindow

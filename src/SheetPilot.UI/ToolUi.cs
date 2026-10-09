@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -46,37 +46,5 @@ namespace SheetPilot.UI
             panel.Children.Add(Heading("连续编号")); Check(panel, o, "Numbering", "添加编号"); Number(panel, o, "Start", "起始值", 0, 1000000); Number(panel, o, "Step", "步长", 1, 1000); Number(panel, o, "Digits", "最少位数", 1, 10);
             Text(panel, o, "Separator", "编号分隔符"); Check(panel, o, "NumberAtEnd", "编号放在名称末尾"); Check(panel, o, "RestartPerBook", "每个工作簿重新编号"); return panel;
         }
-    }
-    public sealed class PreferencesWindow : Window
-    {
-        public PreferencesWindow(ToolPreferences preferences, NavigationSettings colors, Func<string> save, Action navigationSettings)
-        {
-            ToolUi.Theme(this, colors, "设置", 650, 820);
-            var root = new DockPanel { Margin = new Thickness(20) }; Content = root;
-            var bottom = new StackPanel(); DockPanel.SetDock(bottom, Dock.Bottom); root.Children.Add(bottom);
-            var message = ToolUi.Note("设置立即用于本次会话，关闭窗口时自动保存。"); bottom.Children.Add(message);
-            var actions = new StackPanel { Orientation = Orientation.Horizontal }; bottom.Children.Add(actions);
-            ToolUi.Button(actions, "保存设置", () => { KeyboardCommit(); preferences.Normalize(); message.Text = save(); });
-            ToolUi.Button(actions, "导航面板设置", () => { Close(); navigationSettings(); });
-            ToolUi.Button(actions, "关闭", Close);
-            var panel = new StackPanel { Margin = new Thickness(0, 0, 14, 12) }; root.Children.Add(ToolUi.Scroll(panel));
-            panel.Children.Add(ToolUi.Heading("聚焦 · 临时行列高亮"));
-            var color = new ColorEditor { Caption = "高亮颜色" }; ToolUi.Bind(color, ColorEditor.ValueProperty, preferences, "FocusColor"); panel.Children.Add(color);
-            ToolUi.Number(panel, preferences, "FocusOpacity", "不透明度（%）", 5, 60); ToolUi.Number(panel, preferences, "FocusInterval", "滚动补偿间隔（毫秒，选区实时跟随）", 16, 100);
-            ToolUi.Check(panel, preferences, "FocusRow", "高亮当前行"); ToolUi.Check(panel, preferences, "FocusColumn", "高亮当前列"); ToolUi.Check(panel, preferences, "ClearActiveCell", "保持活动单元格清晰，不覆盖它");
-            panel.Children.Add(ToolUi.Note("覆盖层不写入单元格，不随文件保存或打印；再次点击「聚焦」关闭。每次启动默认关闭。"));
-            panel.Children.Add(ToolUi.Heading("文本 / 数值转换"));
-            ToolUi.Check(panel, preferences, "PreserveVisualAlignment", "保持视觉位置（将常规对齐固定为左 / 右）");
-            ToolUi.Check(panel, preferences, "VisibleCellsOnly", "只处理可见单元格"); ToolUi.Check(panel, preferences, "PreserveLeadingZeros", "转数值时保留前导零文本（如 00123）");
-            ToolUi.Check(panel, preferences, "ProtectPrecision", "跳过超过15位有效数字，保护长编号"); ToolUi.Check(panel, preferences, "TrimNumericText", "解析前忽略首尾空格");
-            ToolUi.Check(panel, preferences, "AllowThousands", "识别规范的千位分隔符"); ToolUi.Check(panel, preferences, "AllowPercent", "识别百分比文本（12% → 0.12）");
-            ToolUi.Check(panel, preferences, "NumberAsTextHint", "转文本后允许显示绿色数字文本角标");
-            ToolUi.Choice(panel, preferences, "DecimalCulture", "数字分隔符", "遵循 Excel 小数点 / 千位分隔符", "固定英文格式（1,234.56）");
-            ToolUi.Number(panel, preferences, "ConversionLimit", "每次最多处理单元格数", 100, 200000);
-            panel.Children.Add(ToolUi.Note("只转换常量；默认将常规对齐固定为原来的左右位置，其余数字格式、缩进等格式保留。公式、空白、错误、合并单元格和锁定单元格跳过。日期型数值转为底层序列文本。绿色角标需 Excel 自身的后台错误检查和「数字以文本存储」检查开启。"));
-            panel.Children.Add(ToolUi.Heading("批量重命名 · 默认规则")); panel.Children.Add(ToolUi.RenameControls(preferences.Rename, true));
-            panel.Children.Add(ToolUi.Note("应用修改可能清除 Excel 自身的撤销记录；GridPilot 的「撤销上次操作」可恢复最近一次成功的批量修改，目标内容需未被再次修改。不会自动保存工作簿。"));
-        }
-        private void KeyboardCommit() { System.Windows.Input.FocusManager.SetFocusedElement(this, this); System.Windows.Input.Keyboard.ClearFocus(); }
     }
 }

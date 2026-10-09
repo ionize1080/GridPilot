@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Linq;
 using System.Diagnostics;
@@ -23,6 +23,18 @@ internal static partial class Program
             Check(ReferenceEquals(((System.Windows.Controls.ListBox)view.FindName("SheetList")).SelectedItem,model.Selected),"navigation: actual ListBox binding retains the correct active item");
             model.Query="Other"; PumpUntil(()=>model.Results.Count==0);model.Update(snapshot(true));Check(model.Selected==null,"navigation: filtered active sheet cannot leave stale selection");
         }
+        var prefs=new PreferencesWindow(new ToolPreferences(),new NavigationSettings(),()=>"Saved",()=>{});
+        var content=(System.Windows.FrameworkElement)prefs.Content;
+        content.Measure(new System.Windows.Size(940,740));content.Arrange(new System.Windows.Rect(0,0,940,740));content.UpdateLayout();
+        foreach(var id in new[]{"focus","conversion","rename","about","navigation","general"})
+        {
+            ((System.Windows.Controls.Primitives.ToggleButton)prefs.FindName("Category_"+id)).RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+            content.UpdateLayout();
+            Check(prefs.ActiveSection==id && (id=="general" ? prefs.ScrollOffset<1 : prefs.ScrollOffset>0),"settings: category "+id+" scrolls to matching section");
+        }
+        var scroll=(System.Windows.Controls.ScrollViewer)prefs.FindName("SettingsScroll");scroll.ScrollToVerticalOffset(900);content.UpdateLayout();
+        Check(prefs.ActiveSection!="general","settings: continuous scroll updates the sidebar selection");
+        prefs.Close();
         Check(ColorPalette.FromHsv(0,1,1)==Colors.Red && ColorPalette.FromHsv(120,1,1)==Colors.Lime && ColorPalette.FromHsv(240,1,1)==Colors.Blue,"palette: hue primaries");
         Check(ColorPalette.FromHsv(30,0,1)==Colors.White && ColorPalette.FromHsv(30,1,0)==Colors.Black,"palette: saturation and brightness limits");
     }
@@ -56,6 +68,7 @@ internal static partial class Program
                 try
                 {
                     if(text=="close")frame.Continue=false;
+                    else if(text=="switch-close") { app.Goto(b.Sheets["总览"].Range["C3"],false); b.Close(false); Console.WriteLine("In-host lifecycle: activated and closed owned workbook B without saving"); }
                     else if(text=="diagnostics") {app.Run("GridPilot_Diagnostics");File.Copy(Path.Combine(Path.GetTempPath(),"GridPilot-"+pid+".log"),Path.Combine(directory,"host-diagnostics.log"),true);}
                     else if(text=="benchmark")
                     {

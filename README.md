@@ -1,12 +1,12 @@
-# GridPilot
+﻿# GridPilot
 
 面向 Windows 桌面 Excel 的便携工具集。原生 Ribbon 搭配 WPF 界面，提供工作表导航、批量重命名、临时行列聚焦和文本 / 数值转换。原 SheetPilot 自 v0.4 更名为 **GridPilot**。
 
-**当前版本：v0.5.0 正式 Release。** 目标为 Windows 10 + Excel 2010 标准版；已在 Excel 16.0 64 位完成集成测试，Excel 2010 和 x86 加载仍需目标机验收。
+**当前版本：v0.6.0 正式 Release。** 目标为 Windows 10 + Excel 2010 标准版；已在 Excel 16.0 64 位完成集成测试，Excel 2010 和 x86 加载仍需目标机验收。
 
 ## 下载与使用
 
-从 [Releases](https://github.com/ionize1080/GridPilot/releases) 下载 `GridPilot-0.5.0-portable.zip` 并解压。
+从 [Releases](https://github.com/ionize1080/GridPilot/releases) 下载 `GridPilot-0.6.0-portable.zip` 并解压。
 
 1. 在 Excel 的“关于”页面确认 **Excel 位数**，不要按 Windows 位数选择。
 2. 32 位 Excel 加载 `GridPilot-x86.xll`；64 位 Excel 加载 `GridPilot-x64.xll`。一次只加载一个。
@@ -16,6 +16,13 @@
 无需安装本插件、VSTO、浏览器组件或管理员权限。系统需已有 .NET Framework 4.6.2+；Windows 10 1607 及之后的正常系统满足这一运行基线。`Check-Environment.ps1` 提供只读检查。
 
 Excel-DNA 创建 Ribbon 和任务面板时会做当前用户的临时 COM 注册，所以便携不等同于完全不访问注册表。XLL 未进行发布者数字签名；加载仍受 Office 信任策略约束。
+
+## v0.6 更新
+
+- 聚焦不再因正常点击期间 Excel 短暂忙碌而隐藏；透明帧一次提交，相同高亮区域不重复重绘。
+- 检测实际工作表遮挡，进入“文件”页面、右键菜单和设置窗口时隐藏，返回表格后恢复。
+- 设置改为左侧六个分类、右侧连续滚动；点击定位与滚动位置联动。
+- 通用配色、导航布局、聚焦、转换和重命名默认规则均可在统一设置内调整，保留导航独立入口。
 
 ## v0.5 更新
 
@@ -67,7 +74,7 @@ Excel-DNA 创建 Ribbon 和任务面板时会做当前用户的临时 COM 注册
 <img src="docs/navigation-colors.png" width="340" alt="提示开关及自定义颜色" />
 
 <img src="docs/rename-preview.png" width="900" alt="批量重命名预览" />
-<img src="docs/tools-settings.png" width="440" alt="统一工具设置" />
+<img src="docs/tools-settings.png" width="940" alt="统一工具设置" />
 
 ## 架构与扩展
 

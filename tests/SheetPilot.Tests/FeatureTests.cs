@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -51,7 +51,11 @@ internal static partial class Program
         var rename = new RenameWindow(preferences, colors, all => new WorkbookSnapshot("book", "年度分析.xlsx", sources), p => "测试预览", () => "已保存");
         rename.RefreshSources(); RenderWindowContent(rename, Path.Combine(directory,"rename-preview.png"), 1060, 720, 96); rename.Close();
         var settings = new PreferencesWindow(preferences, colors, () => "已保存", () => {});
-        RenderWindowContent(settings, Path.Combine(directory,"tools-settings.png"), 620, 740, 96); settings.Close();
+        RenderWindowContent(settings, Path.Combine(directory,"tools-settings.png"), 940, 740, 96);
+        settings.NavigateToSection("focus");
+        RenderWindowContent(settings, Path.Combine(directory,"tools-settings-focus.png"), 940, 740, 96);
+        colors.ApplyPalette("dark"); settings.NavigateToSection("general");
+        RenderWindowContent(settings, Path.Combine(directory,"tools-settings-dark.png"), 780, 640, 96); settings.Close(); colors.ApplyPalette("green");
         var paletteWindow=new Window(); ToolUiTheme(paletteWindow,colors);
         paletteWindow.Content=new ColorPalette {Value="#2563EB",Margin=new Thickness(16)};
         RenderWindowContent(paletteWindow,Path.Combine(directory,"color-palette.png"),292,354,96);paletteWindow.Close();
@@ -130,6 +134,17 @@ internal static partial class Program
                 Check(focus.IsVisible, "focus COM: owned transparent overlay actually visible");
                 int updates=focus.UpdateCount; alpha.Range["D4"].Select();
                 Check(focus.UpdateCount>updates,"focus COM: selection event renders synchronously without timer or queued macro");
+                alpha.Range["C3"].Select();
+                int presents=focus.PresentCount, shows=focus.ShowCount, hides=focus.HideCount;
+                for(int repeat=0;repeat<20;repeat++)alpha.Range["C3"].Select();
+                Check(focus.PresentCount==presents && focus.ShowCount==shows && focus.HideCount==hides,"focus COM: repeated identical selection never repaints or hide/shows");
+                settings.ClearActiveCell=false;settings.FocusColumn=false;alpha.Range["D3"].Select();presents=focus.PresentCount;
+                alpha.Range["E3"].Select();Check(focus.PresentCount==presents,"focus COM: row-only identical band does not repaint");
+                settings.FocusRow=false;settings.FocusColumn=true;alpha.Range["E4"].Select();presents=focus.PresentCount;
+                alpha.Range["E5"].Select();Check(focus.PresentCount==presents,"focus COM: column-only identical band does not repaint");
+                settings.FocusRow=true;settings.ClearActiveCell=true;
+                for(int repeat=0;repeat<20;repeat++)alpha.Cells[3+repeat%5,3+repeat%3].Select();
+                Check(focus.ShowCount==shows && focus.HideCount==hides,"focus COM: moving row and column updates atomically without hide/show");
                 alpha.Range["C3"].Select();
                 Console.WriteLine(focus.PerformanceSummary);
                 using (var screenshot = new System.Drawing.Bitmap(geometry.Viewport.Width, geometry.Viewport.Height)) using (var graphics = System.Drawing.Graphics.FromImage(screenshot)) { graphics.CopyFromScreen(geometry.Viewport.Location, System.Drawing.Point.Empty, geometry.Viewport.Size); screenshot.Save(Path.Combine(directory,"focus-overlay.png"),System.Drawing.Imaging.ImageFormat.Png); }
