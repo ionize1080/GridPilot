@@ -21,12 +21,16 @@ namespace SheetPilot.UI
         private bool disposed;
         private bool searchPending;
         private string query = "", message = "", status = "准备就绪";
-        private bool useRegex, matchCase, includeHidden = true;
-        private int scopeIndex;
+        private bool settingsOpen;
+        private bool settingsSaveFailed;
+        private string settingsStatus = "设置更改后自动保存到 XLL 同目录。";
+        public NavigationSettings Settings { get; }
         private IReadOnlyList<SheetItem> results = new SheetItem[0];
         private SheetItem selected;
-        public NavigationModel()
+        public NavigationModel(NavigationSettings settings = null)
         {
+            Settings = settings ?? new NavigationSettings();
+            Settings.PropertyChanged += SettingsChanged;
             dispatcher = Dispatcher.CurrentDispatcher;
             debounce = new DispatcherTimer(TimeSpan.FromMilliseconds(180), DispatcherPriority.Background, (s,e) => { debounce.Stop(); StartSearch(); }, dispatcher);
             debounce.Stop();
@@ -36,10 +40,25 @@ namespace SheetPilot.UI
         public event Action RefreshRequested;
         public event Action<SheetItem> NavigateRequested;
         public string Query { get => query; set { if (Set(ref query, value)) ScheduleSearch(); } }
-        public bool UseRegex { get => useRegex; set { if (Set(ref useRegex, value)) ScheduleSearch(); } }
-        public bool MatchCase { get => matchCase; set { if (Set(ref matchCase, value)) ScheduleSearch(); } }
-        public bool IncludeHidden { get => includeHidden; set { if (Set(ref includeHidden, value)) ScheduleSearch(); } }
-        public int ScopeIndex { get => scopeIndex; set { if (Set(ref scopeIndex, value)) { ClearForScope(); ScopeChanged?.Invoke(value == 1); } } }
+        public bool UseRegex { get => Settings.UseRegex; set => Settings.UseRegex = value; }
+        public bool MatchCase { get => Settings.MatchCase; set => Settings.MatchCase = value; }
+        public bool IncludeHidden { get => Settings.IncludeHidden; set => Settings.IncludeHidden = value; }
+        public int ScopeIndex { get => Settings.ScopeIndex; set => Settings.ScopeIndex = value; }
+        public bool IsSettingsOpen { get => settingsOpen; set { Set(ref settingsOpen, value); Notify(nameof(IsNavigationOpen)); } }
+        public bool IsNavigationOpen => !IsSettingsOpen;
+        public string SettingsStatus { get => settingsStatus; set => Set(ref settingsStatus, value); }
+        public bool SettingsSaveFailed { get => settingsSaveFailed; set => Set(ref settingsSaveFailed, value); }
+        public bool ShowWorkbookNames => Settings.WorkbookNameMode == 1 || (Settings.WorkbookNameMode == 0 && ScopeIndex == 1);
+        public double EffectiveRowHeight => Math.Max(Settings.RowHeight, ShowWorkbookNames ? Settings.FontSize * 2 + 14 : Settings.FontSize + 12);
+        public System.Windows.Thickness RowMargin => new System.Windows.Thickness(0, 0, 0, Settings.RowGap);
+        private void SettingsChanged(object sender, PropertyChangedEventArgs e)
+        {
+            if (disposed) return;
+            Notify(e.PropertyName);
+            Notify(nameof(ShowWorkbookNames)); Notify(nameof(EffectiveRowHeight)); Notify(nameof(RowMargin));
+            if (e.PropertyName == nameof(Settings.ScopeIndex)) { ClearForScope(); ScopeChanged?.Invoke(ScopeIndex == 1); }
+            else if (e.PropertyName == nameof(Settings.UseRegex) || e.PropertyName == nameof(Settings.MatchCase) || e.PropertyName == nameof(Settings.IncludeHidden)) ScheduleSearch();
+        }
         public string WorkbookName => snapshot.Name;
         public IReadOnlyList<SheetItem> Results { get => results; private set => Set(ref results, value); }
         public SheetItem Selected { get => selected; set => Set(ref selected, value); }
@@ -107,7 +126,7 @@ namespace SheetPilot.UI
             catch (Exception) { if (!disposed && version == revision) { searchPending = false; Report("搜索暂时不可用，请刷新重试。"); } }
             finally { if (ReferenceEquals(pending, source)) pending = null; source.Dispose(); }
         }
-        public void Dispose() { disposed = true; debounce.Stop(); revision++; pending?.Cancel(); }
+        public void Dispose() { disposed = true; Settings.PropertyChanged -= SettingsChanged; debounce.Stop(); revision++; pending?.Cancel(); }
         private bool Set<T>(ref T field, T value, [CallerMemberName] string name = null)
         { if (EqualityComparer<T>.Default.Equals(field, value)) return false; field = value; Notify(name); return true; }
         private void Notify(string name) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));

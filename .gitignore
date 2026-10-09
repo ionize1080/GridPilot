@@ -4,3 +4,4 @@
 dist/
 preview/
 *.user
+SheetPilot.settings.json*

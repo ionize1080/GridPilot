@@ -23,11 +23,13 @@ internal static class Program
         try
         {
             SearchTests();
+            SettingsTests();
             UiTests(args.Length > 1 && args[0] == "--render" ? args[1] : null);
             if (args.Length > 1 && args[0] == "--excel")
             {
                 int processId = ExcelTests(Path.GetFullPath(args[1]));
-                GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect(); GC.WaitForPendingFinalizers();
+                // COM finalizers may marshal to this STA; keep it pumping instead of blocking it.
+                for (int i = 0; i < 2; i++) { GC.Collect(); var finalizers = Task.Run(() => GC.WaitForPendingFinalizers()); PumpUntil(() => finalizers.IsCompleted, 10000); }
                 try { using (var process = Process.GetProcessById(processId)) Check(process.WaitForExit(15000), "XLL: owned Excel instance exits after Quit"); }
                 catch (ArgumentException) { Check(true, "XLL: owned Excel instance already exited"); }
             }
@@ -82,6 +84,50 @@ internal static class Program
         public System.Collections.Generic.IEnumerable<FeatureCommand> Commands => new[] { new FeatureCommand("test_go", "Go", "Go", "GoTo", () => Executed = true) };
         public void Dispose() => Disposed = true;
     }
+    private static void SettingsTests()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "SheetPilot-settings-test-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var path = Path.Combine(directory, "SheetPilot.settings.json");
+            var store = new SettingsStore(path);
+            var settings = store.Load();
+            Check(settings.DockSide == 0 && settings.WorkbookNameMode == 0 && !settings.ShowHeader, "settings: compact right dock defaults");
+            settings.DockSide = 1; settings.RowHeight = 52; settings.RowGap = 4; settings.FontSize = 16;
+            settings.WorkbookNameMode = 2; settings.PaneWidth = 380; settings.ShowHeader = true;
+            settings.ShowSheetNumbers = false; settings.ShowFooter = false; settings.ShowKeyboardHints = true;
+            settings.AutoRefresh = false; settings.RefreshSeconds = 7; settings.ScopeIndex = 1; settings.UseRegex = true; settings.IncludeHidden = false;
+            Check(store.Save(settings), "settings: portable JSON save");
+            var loaded = new SettingsStore(path).Load();
+            Check(loaded.DockSide == 1 && loaded.RowHeight == 52 && loaded.RowGap == 4 && loaded.FontSize == 16 && loaded.PaneWidth == 380, "settings: layout restored after new store");
+            Check(loaded.WorkbookNameMode == 2 && loaded.ScopeIndex == 1 && loaded.UseRegex && !loaded.IncludeHidden, "settings: scope and search preferences restored");
+            Check(loaded.ShowHeader && !loaded.ShowFooter && !loaded.ShowSheetNumbers && loaded.ShowKeyboardHints && !loaded.AutoRefresh && loaded.RefreshSeconds == 7, "settings: display and refresh preferences restored");
+            loaded.RowHeight = 999; loaded.RowGap = -1; loaded.PaneWidth = 1; loaded.FontSize = 100;
+            Check(loaded.RowHeight == 80 && loaded.RowGap == 0 && loaded.PaneWidth == 260 && loaded.FontSize == 18, "settings: unsafe numeric values clamped");
+            Check(store.Save(loaded) && File.Exists(path + ".bak"), "settings: atomic replacement keeps backup");
+            File.SetAttributes(path, FileAttributes.ReadOnly);
+            Check(!store.Save(settings) && store.HasError, "settings: read-only config does not report a successful save");
+            File.SetAttributes(path, FileAttributes.Normal);
+            File.WriteAllText(path, "{broken");
+            var corrupt = new SettingsStore(path); Check(corrupt.Load().DockSide == 0 && corrupt.HasError, "settings: corrupt file falls back without startup failure");
+            Check(corrupt.Save(new NavigationSettings()) && File.ReadAllText(path + ".bak") == "{broken", "settings: corrupt original backed up on explicit change");
+            File.WriteAllText(path, "{\"SchemaVersion\":999}");
+            var future = new SettingsStore(path); future.Load();
+            Check(!future.Save(new NavigationSettings()) && File.ReadAllText(path).Contains("999"), "settings: newer schema is never overwritten");
+            File.WriteAllText(path, "{\"SchemaVersion\":1,\"DockSide\":1}");
+            var partial = new SettingsStore(path).Load();
+            Check(partial.DockSide == 1 && partial.RowHeight == 36 && partial.IncludeHidden, "settings: missing fields get defaults");
+            var blocker = Path.Combine(directory, "not-a-folder"); File.WriteAllText(blocker, "");
+            var unavailable = new SettingsStore(Path.Combine(blocker, "settings.json"));
+            Check(!unavailable.Save(settings) && unavailable.HasError, "settings: unwritable destination reports failure");
+            settings.Reset();
+            Check(settings.DockSide == 0 && settings.RowHeight == 36 && settings.WorkbookNameMode == 0 && !settings.ShowHeader, "settings: restore defaults");
+            using (var restoredModel = new NavigationModel(partial))
+                Check(restoredModel.Settings.DockSide == 1 && !restoredModel.ShowWorkbookNames, "settings: new UI uses persisted preferences");
+        }
+        finally { Directory.Delete(directory, true); }
+    }
     private static void PumpUntil(Func<bool> done, int milliseconds = 4000)
     {
         var time = Stopwatch.StartNew();
@@ -113,7 +159,28 @@ internal static class Program
             model.Navigate(rows[5]); Check(navigated == 0 && model.HasMessage, "hidden navigation blocked");
             model.Navigate(rows[1]); Check(navigated == 1, "visible navigation requested");
             var view = new NavigationView(model);
+            Check(!model.ShowWorkbookNames && model.EffectiveRowHeight == 36, "UI: current scope omits redundant workbook subtitle");
+            model.Settings.WorkbookNameMode = 1;
+            Check(model.ShowWorkbookNames && model.EffectiveRowHeight >= 40, "UI: always-show reserves two-line height");
+            model.Settings.FontSize = 18; model.Settings.RowHeight = 28;
+            Check(model.EffectiveRowHeight >= 50, "UI: large font and small row do not overlap");
+            model.Settings.Reset();
             if (directory != null) { Directory.CreateDirectory(directory); Render(view, Path.Combine(directory, "navigation-preview.png"), 340, 820, 96); Render(view, Path.Combine(directory, "navigation-150dpi.png"), 340, 820, 144); Render(view, Path.Combine(directory, "navigation-narrow.png"), 280, 700, 96); }
+            if (directory != null)
+            {
+                var list = (System.Windows.Controls.ListBox)view.FindName("SheetList");
+                Check(((System.Windows.Controls.ListBoxItem)list.ItemContainerGenerator.ContainerFromIndex(0)).ActualHeight == model.EffectiveRowHeight, "UI: configured row height reaches actual WPF item");
+                var many = rows.Concat(Enumerable.Range(8, 16).Select(i => new SheetItem(i.ToString(), new[] { "费用明细", "预算执行", "应收账款", "现金流", "库存清单", "采购计划", "客户分析", "资产台账" }[(i-8)%8] + " " + i, i, SheetVisibility.Visible, false, "工作表", "demo", "2026 年度经营分析.xlsx"))).ToArray();
+                model.Update(new WorkbookSnapshot("demo", "2026 年度经营分析.xlsx", many)); PumpUntil(() => model.Results.Count == 23);
+                Render(view, Path.Combine(directory, "navigation-preview.png"), 340, 820, 96);
+                model.Settings.RowHeight = 28; model.Settings.RowGap = 0; model.Settings.ShowSheetNumbers = false; model.Settings.ShowFooter = false;
+                Render(view, Path.Combine(directory, "navigation-compact.png"), 280, 700, 96);
+                model.Settings.Reset();
+                model.IsSettingsOpen = true;
+                Render(view, Path.Combine(directory, "navigation-settings.png"), 340, 1000, 96);
+                model.IsSettingsOpen = false;
+                model.Update(new WorkbookSnapshot("demo", "2026 年度经营分析.xlsx", rows)); PumpUntil(() => model.Results.Count == 7);
+            }
             model.Query = "销售";
             model.Navigate(rows[0]); Check(navigated == 1, "pending search cannot navigate stale results");
             model.Query = "趋势";
@@ -129,6 +196,12 @@ internal static class Program
             if (directory != null) Render(view, Path.Combine(directory, "navigation-regex.png"), 340, 720, 96);
             bool scope = false; model.ScopeChanged += all => scope = all; model.ScopeIndex = 1;
             Check(scope && model.Results.Count == 0, "scope change clears stale rows");
+            Check(model.ShowWorkbookNames, "UI: all-workbook scope automatically shows workbook names");
+            model.Update(new WorkbookSnapshot("demo", "全部 1 个工作簿", rows)); PumpUntil(() => model.Results.Count == 3);
+            if (directory != null) Render(view, Path.Combine(directory, "navigation-all-workbooks.png"), 340, 720, 96);
+            model.Settings.WorkbookNameMode = 2;
+            Check(!model.ShowWorkbookNames, "UI: never-show preference overrides all-workbook scope");
+            model.Settings.WorkbookNameMode = 0;
             model.Update(WorkbookSnapshot.Empty);
             PumpUntil(() => model.Status == "0 / 0 个页面");
             Check(model.IsEmpty, "empty workbook state");
@@ -190,12 +263,15 @@ internal static class Program
             Check(true, "XLL: navigation command returned");
             // Pump Excel and WPF messages before closing the owned test instance.
             var wait = Stopwatch.StartNew(); PumpUntil(() => wait.ElapsedMilliseconds > 1800);
+            var expectedSettings = new SettingsStore(Path.Combine(Path.GetDirectoryName(addIn), "SheetPilot.settings.json")).Load();
+            string paneLog = File.ReadAllText(Path.Combine(Path.GetTempPath(), "SheetPilot-" + processId + ".log"));
+            Check(paneLog.Contains("dock=" + (expectedSettings.DockSide == 1 ? "msoCTPDockPositionLeft" : "msoCTPDockPositionRight")), "XLL: actual task pane uses saved/default dock side");
+            Check(paneLog.Contains("width=" + expectedSettings.PaneWidth), "XLL: actual task pane uses saved/default width");
             second.Close(false);
         }
         finally
         {
             if (app != null) { app.Quit(); Marshal.FinalReleaseComObject((object)app); app = null; }
-            GC.Collect(); GC.WaitForPendingFinalizers();
         }
         return processId;
     }

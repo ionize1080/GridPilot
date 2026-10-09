@@ -11,6 +11,9 @@ namespace SheetPilot.UI
         private NavigationModel Model => (NavigationModel)DataContext;
         public void FocusSearch() { SearchBox.Focus(); SearchBox.SelectAll(); }
         private void RefreshClick(object sender, RoutedEventArgs e) => Model.Refresh();
+        private void SettingsClick(object sender, RoutedEventArgs e) => Model.IsSettingsOpen = true;
+        private void BackClick(object sender, RoutedEventArgs e) { Model.IsSettingsOpen = false; FocusSearch(); }
+        private void ResetClick(object sender, RoutedEventArgs e) => Model.Settings.Reset();
         private void ClearClick(object sender, RoutedEventArgs e) { Model.Query = ""; FocusSearch(); }
         private void SheetClick(object sender, MouseButtonEventArgs e)
         {
@@ -19,6 +22,11 @@ namespace SheetPilot.UI
         }
         private void OnKeyDown(object sender, KeyEventArgs e)
         {
+            if (Model.IsSettingsOpen)
+            {
+                if (e.Key == Key.Escape) { Model.IsSettingsOpen = false; FocusSearch(); e.Handled = true; }
+                return;
+            }
             if (e.Key == Key.F && (Keyboard.Modifiers & ModifierKeys.Control) != 0) { FocusSearch(); e.Handled = true; }
             else if (e.Key == Key.F5) { Model.Refresh(); e.Handled = true; }
             else if (e.Key == Key.Escape) { Model.Query = ""; e.Handled = true; }
