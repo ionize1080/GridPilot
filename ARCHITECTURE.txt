@@ -1,0 +1,119 @@
+﻿SheetPilot：长期架构与扩展约定
+=============================
+
+1. 技术决策
+
+使用 Excel-DNA 1.9.0（固定正式版本）+ .NET Framework 4.6.2 + WPF。
+WinForms UserControl / ElementHost 只承担 Office CustomTaskPane 的承载职责。
+Ribbon 遵循 Office 2010 原生主题；自定义的现代界面放在 WPF 面板内。
+不修改 Excel 窗口父子关系，不使用 SetParent、置顶悬浮窗口或浏览器进程嵌入。
+
+选择理由：XLL 可以按 Excel 位数独立打包；Excel-DNA 的成熟接口覆盖 2010；
+.NET Framework 与旧 Office 的部署组合较简单。WPF 提供布局、数据绑定、矢量缩放、
+键盘交互和列表虚拟化，适合将多个工具逐步放到统一面板中。
+net462 是为减少旧 Win10 的额外安装需求而选择的最低编译基线；装有 4.8/4.8.1 的机器
+运行在其已有兼容运行时上。可在保持 Core/API 边界时将来增加现代运行时构建。
+
+没有选择 Electron：它可以作为将来独立工具的前端，但目前会额外引入进程通信、窗口
+生命周期、焦点/任务栏处理和大量分发文件，这些并不是工作表导航所必需的能力。
+没有选择 Office.js：目标是 Excel 2010 桌面版，不能将现代 Office Web Add-in 能力作为基础。
+
+2. 分层
+
+Ribbon / XLL 启停
+  → FeatureRegistry（显式模块注册，统一命令元数据和分派）
+    → NavigationModule（面板生命周期、Excel 安全调用队列、定时刷新）
+      → ExcelGateway（只在 Excel 主线程访问 COM）
+        → WorkbookSnapshot / SheetItem（脱离 COM 的不可变数据）
+      → NavigationModel（防抖、搜索取消、结果代次校验）
+        → SheetSearch（后台执行，正则超时和总预算）
+        → NavigationView（WPF 可复用界面）
+
+src/SheetPilot.Core
+  数据模型、查询逻辑、IWorkbookGateway、IFeatureModule、FeatureCommand、FeatureRegistry。
+  不依赖 Office、Excel-DNA 或任何界面库；业务测试无需安装 Excel。
+
+src/SheetPilot.UI
+  NavigationModel 与 NavigationView；只接收快照、发出操作意图。
+  支持脱离 Excel 的真实 WPF 渲染与验证；不持有 COM 对象。
+
+src/SheetPilot.Excel
+  组合根 AddIn、原生 Ribbon、ExcelGateway、NavigationModule、WinForms 承载层。
+  Office 使用动态 COM 访问 + 框架自带的 COM 类型信息，不需要安装 Office PIA。
+  SheetPilot-AddIn.dna 显式打包 Core/UI，不能仅依赖项目引用自动打包。
+
+tests/SheetPilot.Tests
+  独立可执行测试程序；搜索、模型更新、真实 WPF 渲染。
+  --excel 参数启动独立临时 Excel 实例，验证实际 COM 和 XLL；不会打开用户文件。
+
+3. 线程、错误及生命周期
+
+ExcelGateway 在创建时记录拥有线程，阻止后台 COM 调用。
+读取及激活通过 ExcelAsyncUtil.QueueAsMacro 回到 Excel 主线程和可接受宏操作的时机。
+编辑单元格时不堆积刷新，最多一个待处理刷新；每个面板最多一个待处理跳转。
+搜索只处理快照，不把 Workbook、Worksheet、Range 等传入 Task.Run。
+180ms 防抖；取消旧查询；只接受最新代次结果；搜索未完成时不跳转旧结果。
+保持 Excel 工作表原顺序；不通过排序和选中事件偷偷切换工作表。
+单击或 Enter 才激活；激活前重新检查目标工作簿、页面身份和可见性。
+
+Excel 2010 为 MDI：使用应用窗口句柄对应的单个面板；2013+ 为 SDI：面板按窗口分别创建。
+只在用户点击入口时创建面板，避免 AutoOpen 里初始化 CustomTaskPane 的旧版兼容风险。
+面板可见时刷新；隐藏后停止周期任务；再次显示重新启动。
+识别失效窗口并释放面板；加载项卸载、Ribbon OnBeginShutdown/OnDisconnection 都执行
+幂等清理：停止定时器、取消搜索、删除 CTP、释放 ElementHost。
+生产宿主不调用 FinalReleaseComObject 破坏共享 Office RCW；显式 IUnknown AddRef 成对释放。
+测试程序拥有独立 Excel 实例，可释放自己的 RCW。
+
+页面身份优先采用 CodeName；未保存工作簿 CodeName 为空时使用进程内 COM 身份。
+工作簿身份为进程内 COM 身份与名称组合。另存为后旧结果将失效，刷新后恢复。
+这些标识仅用于当前会话，不可作为未来跨会话书签数据库的持久主键。
+
+4. 增加第二个功能
+
+例如增加“单元格书签”或“批量导出”：
+  a. 新建功能模块类，实现 IFeatureModule，提供稳定唯一 Id、Label 和 Commands。
+  b. 每个 FeatureCommand 提供 id、名称、描述、Office imageMso 和处理方法。
+  c. 在 AddIn.AutoOpen 中 Features.Add(new ...Module(...)) 显式注册。
+  d. Ribbon 自动从模块生成分组和按钮，不需要修改已有导航回调。
+  e. 新 UI 放在 UI 项目或独立 Feature 项目；Excel 操作通过宿主适配器执行。
+  f. 模块 Dispose 必须解除其事件、停止计时器、取消后台任务、释放自己拥有的界面。
+
+新增项目必须在 DNA 中显式加入要打包的 Reference，并验证隔离目录下单 XLL 加载。
+第一版不从任意文件夹扫描并执行第三方 DLL，避免形成不可控插件加载链。
+未来需要第三方模块时，再增加版本化合同、能力声明和可验证的签名/来源机制。
+
+修改文件/工作簿的工具应有独立操作请求模型，列出作用范围和可预览结果，
+不要让 ViewModel 直接调用 Range.Value 或 Application.Run 任意脚本。
+将错误映射为可理解的界面状态，不能通过全局异常吞噬隐藏失败。
+
+5. 建议演进顺序（未实现项）
+
+阶段 0：目标机兼容验收
+  Win10 + Excel 2010 SP2 标准版 x86/x64，特别是任务栏多文件切换、Alt+Tab、关机退出、
+  高 DPI、保护视图、实际企业策略。正式大范围使用前完成此关卡。
+
+阶段 1：导航体验
+  自定义分组、收藏、最近访问、跨工作簿分组标题、保存范围偏好。
+  当前不具备自定义 PDF 式书签树或单元格地址书签；第一版是 Sheet 页面目录。
+  本地存储采用带 schemaVersion 的 JSON 和原子写入；若需便携配置可选择 XLL 同目录
+  data/，目录只读时给出明确提示并回退会话设置，不静默写入用户文档。
+  书签持久身份需处理文件移动、另存为、工作表重命名和同名文件冲突。
+
+阶段 2：独立功能模块
+  单元格/区域书签、命名区域导航、批量导出、工作簿质量检查。
+  输出工具与读取工具分开授权和实现，避免搜索操作变成写入操作。
+
+阶段 3：性能与发布
+  大规模工作簿采用事件增量索引 + 低频校验；为长 COM 扫描实现分批主线程执行。
+  目前每次全量读取 Sheet 元信息；5000 条纯数据搜索测试不代表 5000 张实际表的 COM 性能。
+  锁定依赖并保留构建记录；发布前数字签名；双位数包；升级采用关闭 Excel 后替换文件。
+  可提供受控错误诊断导出，不默认上传任何工作簿数据。
+
+6. 已知边界
+
+• 同一 Excel 进程内跨工作簿，不跨 Excel 独立进程。
+• 设置不跨 Excel 重启保存；隐藏页只显示不解锁。
+• 本版未承诺新版 Excel 每个窗口的面板状态完全同步。
+• Ribbon 的外观由 Excel 决定，不能在 Excel 2010 中整体替换成现代 Office Ribbon。
+• 便携 XLL 仍服从 Office 信任策略和用户权限；运行时有临时 HKCU COM 注册。
+• 无热更新服务、网络请求、数据上传或遥测。

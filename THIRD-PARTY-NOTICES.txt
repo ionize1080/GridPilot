@@ -1,0 +1,9 @@
+﻿SheetPilot includes unmodified Excel-DNA 1.9.0 loader and integration components.
+Excel-DNA project: https://github.com/Excel-DNA/ExcelDna
+Copyright and redistribution terms: see EXCEL-DNA-LICENSE.txt (zlib-style license).
+
+Microsoft.NETFramework.ReferenceAssemblies 1.0.3 is used only at build time.
+Its reference assemblies are not included in the portable XLL package.
+The installed Windows .NET Framework provides the runtime, WPF, WinForms and Microsoft.VisualBasic.
+
+The SheetPilot application is separate from and is not endorsed by Microsoft or Excel-DNA.

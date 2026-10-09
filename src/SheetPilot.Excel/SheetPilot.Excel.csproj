@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net462</TargetFramework><UseWindowsForms>true</UseWindowsForms><UseWPF>true</UseWPF>
+    <ExcelDnaCreate32BitAddIn>true</ExcelDnaCreate32BitAddIn><ExcelDnaCreate64BitAddIn>true</ExcelDnaCreate64BitAddIn>
+    <ExcelDnaPack>true</ExcelDnaPack><ExcelDnaPackCompressResources>true</ExcelDnaPackCompressResources>
+    <ExcelDnaPackManagedDependencies>true</ExcelDnaPackManagedDependencies>
+    <ExcelDnaPackNativeLibraryDependencies>false</ExcelDnaPackNativeLibraryDependencies>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="ExcelDna.AddIn" Version="1.9.0" />
+    <ProjectReference Include="../SheetPilot.Core/SheetPilot.Core.csproj" />
+    <ProjectReference Include="../SheetPilot.UI/SheetPilot.UI.csproj" />
+    <Reference Include="Microsoft.CSharp" />
+    <Reference Include="Microsoft.VisualBasic" />
+  </ItemGroup>
+</Project>

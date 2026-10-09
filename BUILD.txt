@@ -1,0 +1,27 @@
+﻿构建 SheetPilot
+===============
+
+开发机：Windows，.NET SDK 8 或 9（含桌面构建支持）。无需安装 Excel 即可编译和跑基础测试。
+项目通过 Microsoft.NETFramework.ReferenceAssemblies 1.0.3 获取 net462 编译引用。
+不要把开发用 SDK 需求和最终用户的运行条件混淆。
+
+从源码根目录运行：
+  powershell -NoProfile -File .\build.ps1
+
+依赖恢复需要 NuGet 网络；已有离线包目录时可用：
+  powershell -NoProfile -File .\build.ps1 -PackageSource C:\path\to\nuget-feed
+
+build.ps1 构建 x86/x64、运行搜索与 UI 测试、输出 dist/，不会启动 Excel 或写系统设置。
+锁文件 packages.lock.json 随源码提供。新增/更新依赖时需有意识更新锁文件，正常构建使用
+--locked-mode。发布前确认 dist 中是 *-packed.xll，而非未打包的构建目录 XLL。
+
+可选 Excel 集成测试（仅在受控开发/测试机运行）：
+  .\tests\SheetPilot.Tests\bin\Release\net462\SheetPilot.Tests.exe --excel <完整64位XLL路径>
+测试程序默认 AnyCPU，在64位系统下以64位运行。若测试32位Excel，需将测试工程以x86编译。
+测试会创建临时工作簿、加载 XLL、验证导航并关闭自己启动的 Excel 实例。
+Excel 被第三方加载项或安全策略阻止退出时，测试应失败并保留错误，不能据此宣称退出通过。
+
+无 Excel 的界面验证：
+  .\tests\SheetPilot.Tests\bin\Release\net462\SheetPilot.Tests.exe --render .\preview
+
+目标机人工验收清单见 VALIDATION.txt。源代码编译成功不能替代 Excel 2010 真机兼容测试。
