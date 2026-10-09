@@ -1,4 +1,4 @@
-﻿构建 SheetPilot
+构建 GridPilot
 ===============
 
 开发机：Windows，.NET SDK 8 或 9（含桌面构建支持）。无需安装 Excel 即可编译和跑基础测试。

@@ -1,4 +1,4 @@
-SheetPilot：长期架构与扩展约定
+GridPilot：长期架构与扩展约定
 =============================
 
 1. 技术决策
@@ -68,11 +68,11 @@ Excel 2010 为 MDI：使用应用窗口句柄对应的单个面板；2013+ 为 S
 工作簿身份为进程内 COM 身份与名称组合。另存为后旧结果将失效，刷新后恢复。
 这些标识仅用于当前会话，不可作为未来跨会话书签数据库的持久主键。
 
-4. 增加第二个功能
+4. 增加功能模块
 
 例如增加“单元格书签”或“批量导出”：
   a. 新建功能模块类，实现 IFeatureModule，提供稳定唯一 Id、Label 和 Commands。
-  b. 每个 FeatureCommand 提供 id、名称、描述、Office imageMso 和处理方法。
+  b. 每个 FeatureCommand 提供 id、名称、描述和处理方法；在 RibbonIcons 中提供自绘图标。
   c. 在 AddIn.AutoOpen 中 Features.Add(new ...Module(...)) 显式注册。
   d. Ribbon 自动从模块生成分组和按钮，不需要修改已有导航回调。
   e. 新 UI 放在 UI 项目或独立 Feature 项目；Excel 操作通过宿主适配器执行。
@@ -95,7 +95,7 @@ Excel 2010 为 MDI：使用应用窗口句柄对应的单个面板；2013+ 为 S
 阶段 1：导航体验
   自定义分组、收藏、最近访问、跨工作簿分组标题。
   当前不具备自定义 PDF 式书签树或单元格地址书签；第一版是 Sheet 页面目录。
-  v0.2 已实现 NavigationSettings / SettingsStore：XLL 同目录 SheetPilot.settings.json，
+  v0.2 已实现 NavigationSettings / SettingsStore：XLL 同目录 GridPilot.navigation.json，
   SchemaVersion=1，数值约束、400ms 合并写入、退出补存、原子替换及 .bak 备份。
   损坏配置回退默认，更改后重建并备份损坏原文；未知版本禁止覆盖；搜索词不保存。
   只读目录给出明确提示并保留会话设置，不静默写入其他目录。进程内多窗口共享配置，
@@ -138,3 +138,25 @@ WinForms 承载层启用双缓冲并跟随背景色，保留 Office 原生窗口
 卸载时显式解绑 CTP 事件、清除本视图键盘焦点并释放承载层。
 不可达的 Office RCW 在后台触发回收，避免退出后因空闲不触发GC而延迟释放。
 不在 Excel STA 等待终结器，不强制释放生产环境共享 RCW，不退出共享 WPF Dispatcher。
+
+8. v0.4 GridPilot 工具模块
+
+保留 SheetPilot.* 内部程序集/命名空间和已有 COM 标识；产品、XLL、配置和仓库使用
+GridPilot。旧导航宏仍可用，新增 GridPilot_ShowNavigation/Rename/Focus/Text/Number/Undo/Settings。
+ToolsModule 管理统一设置、模态 WPF 窗口、状态栏提示、聚焦生命周期及 Ribbon 状态。
+RenamePlanner 与 NumericConversion 是纯逻辑；UI 只接收快照和操作回调。
+WorkbookOperations 在 STA 上重新验证目标身份、内容、名称冲突和保护状态后执行。
+重命名采用临时唯一名称两阶段应用，支持 A/B 互换；失败尝试回滚并明确报告恢复失败。
+转换先收集区域常量，SpecialCells 结果与原选择交集，逐 Areas 遍历以避免不连续选择扩散。
+真实字符串通过 apostrophe Formula 写入，数值通过 Value2 写入，不切换 NumberFormat。
+用户选择默认保持视觉位置，所以只将 General 对齐固定为原左右位置；撤销还原原属性。
+最近一次成功写操作有会话内逆操作，撤销前验证内容和需还原的对齐属性，拒绝覆盖新编辑。
+写入期间临时暂停事件和屏幕更新，finally 恢复；不自动保存工作簿。
+
+FocusOverlay 使用拥有者为当前 Excel 窗口的无激活、鼠标穿透透明覆盖层；不是置顶窗口，
+不改变父子窗口关系。活动窗口 Hwnd 向顶层解析，旧接口不可用时回退 Application.Hwnd。
+按各 Pane 坐标构造行列区域，RangeFromPoint 校验数据边界，支持冻结窗格的区域裁剪。
+普通工作表视图之外隐藏；后台、最小化、编辑等 Excel 不就绪时隐藏。每次启动默认关闭。
+覆盖层不更改单元格/条件格式/工作簿 Saved 状态；不随保存和打印输出。
+RibbonIcons 通过 GDI+ 直接生成透明 32bit 位图，按宿主 DPI 提供图标，释放缓存随 Ribbon 断开。
+Styles.xaml、NumberEditor 和 ColorEditor 由导航及工具窗口共同使用。

@@ -1,4 +1,4 @@
-<DnaLibrary Name="SheetPilot" RuntimeVersion="v4.0" xmlns="http://schemas.excel-dna.net/addin/2020/07/dnalibrary">
+<DnaLibrary Name="GridPilot" RuntimeVersion="v4.0" xmlns="http://schemas.excel-dna.net/addin/2020/07/dnalibrary">
   <ExternalLibrary Path="SheetPilot.Excel.dll" ExplicitExports="true" LoadFromBytes="true" Pack="true" />
   <Reference Path="SheetPilot.Core.dll" Pack="true" />
   <Reference Path="SheetPilot.UI.dll" Pack="true" />

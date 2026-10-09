@@ -14,7 +14,7 @@ using SheetPilot.Core;
 using SheetPilot.UI;
 using SheetPilot.Excel;
 
-internal static class Program
+internal static partial class Program
 {
     private static int checks;
     [STAThread]
@@ -25,6 +25,8 @@ internal static class Program
             SearchTests();
             SettingsTests();
             PreferenceTests();
+            FeatureCoreTests();
+            FeatureRenderTests(args.Length > 1 && args[0] == "--render" ? args[1] : null);
             UiTests(args.Length > 1 && args[0] == "--render" ? args[1] : null);
             if (args.Length > 1 && args[0] == "--excel")
             {
@@ -336,15 +338,22 @@ internal static class Program
             try { gateway.Navigate(overviewItem.WorkbookKey, overviewItem); Check(false, "closed"); } catch (InvalidOperationException) { Check(true, "COM: closed workbook rejected"); }
             var offThread = Task.Run(() => { try { gateway.Capture(); return false; } catch (InvalidOperationException) { return true; } });
             Check(offThread.Result, "COM: background access rejected");
+            FeatureExcelTests((object)app, Path.GetDirectoryName(addIn));
+            second.Activate();
             Check((bool)app.RegisterXLL(addIn), "XLL: packed add-in loaded from isolated directory");
             app.Run("SheetPilot_ShowNavigation");
             Check(true, "XLL: navigation command returned");
             // Pump Excel and WPF messages before closing the owned test instance.
             var wait = Stopwatch.StartNew(); PumpUntil(() => wait.ElapsedMilliseconds > 1800);
-            var expectedSettings = new SettingsStore(Path.Combine(Path.GetDirectoryName(addIn), "SheetPilot.settings.json")).Load();
-            string paneLog = File.ReadAllText(Path.Combine(Path.GetTempPath(), "SheetPilot-" + processId + ".log"));
+            var expectedSettings = new SettingsStore(Path.Combine(Path.GetDirectoryName(addIn), "GridPilot.navigation.json")).Load();
+            string paneLog = File.ReadAllText(Path.Combine(Path.GetTempPath(), "GridPilot-" + processId + ".log"));
             Check(paneLog.Contains("dock=" + (expectedSettings.DockSide == 1 ? "msoCTPDockPositionLeft" : "msoCTPDockPositionRight")), "XLL: actual task pane uses saved/default dock side");
             Check(paneLog.Contains("width=" + expectedSettings.PaneWidth), "XLL: actual task pane uses saved/default width");
+            dynamic commandCell = second.Sheets.Item[1].Range["A1"]; commandCell.Value2 = 246.5; commandCell.Select();
+            app.Run("GridPilot_Text"); PumpUntil(() => (object)commandCell.Value2 is string);
+            Check((string)commandCell.Value2 == "246.5", "XLL: registered conversion command executes queued operation");
+            app.Run("GridPilot_Undo"); PumpUntil(() => (object)commandCell.Value2 is double);
+            Check((double)commandCell.Value2 == 246.5, "XLL: registered undo command restores content");
             second.Close(false);
         }
         finally

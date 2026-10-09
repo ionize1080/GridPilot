@@ -1,23 +1,30 @@
-# SheetPilot
+# GridPilot
 
-面向 Windows 桌面 Excel 的便携式工作表导航加载项。原生 Ribbon 入口搭配 WPF 侧边栏，像翻阅 PDF 书签一样查找并切换 Sheet。
+面向 Windows 桌面 Excel 的便携工具集。原生 Ribbon 搭配 WPF 界面，提供工作表导航、批量重命名、临时行列聚焦和文本 / 数值转换。原 SheetPilot 自 v0.4 更名为 **GridPilot**。
 
-**当前版本：v0.3.0 预发布版。** 目标为 Windows 10 + Excel 2010 标准版；已在 Excel 16.0 64 位完成集成测试，Excel 2010 和 x86 加载仍需目标机验收。
+**当前版本：v0.4.0 预发布版。** 目标为 Windows 10 + Excel 2010 标准版；已在 Excel 16.0 64 位完成集成测试，Excel 2010 和 x86 加载仍需目标机验收。
 
 ## 下载与使用
 
-从 [Releases](https://github.com/ionize1080/SheetPilot/releases) 下载 `SheetPilot-0.3.0-portable.zip` 并解压。
+从 [Releases](https://github.com/ionize1080/GridPilot/releases) 下载 `GridPilot-0.4.0-portable.zip` 并解压。
 
 1. 在 Excel 的“关于”页面确认 **Excel 位数**，不要按 Windows 位数选择。
-2. 32 位 Excel 加载 `SheetPilot-x86.xll`；64 位 Excel 加载 `SheetPilot-x64.xll`。一次只加载一个。
+2. 32 位 Excel 加载 `GridPilot-x86.xll`；64 位 Excel 加载 `GridPilot-x64.xll`。一次只加载一个。
 3. 双击 XLL，或在 Excel 中通过“文件 → 打开”加载。
-4. 点击“SheetPilot → 工作表导航”。
+4. 点击“GridPilot → 工作表导航”。
 
 无需安装本插件、VSTO、浏览器组件或管理员权限。系统需已有 .NET Framework 4.6.2+；Windows 10 1607 及之后的正常系统满足这一运行基线。`Check-Environment.ps1` 提供只读检查。
 
 Excel-DNA 创建 Ribbon 和任务面板时会做当前用户的临时 COM 注册，所以便携不等同于完全不访问注册表。XLL 未进行发布者数字签名；加载仍受 Office 信任策略约束。
 
 ## 功能
+
+- **批量重命名**：当前 / 所有工作簿范围，逐项勾选、正则捕获替换、前后缀、大小写、编号、隐藏页 / 图表页过滤。应用前展示新旧名称，检测重名、非法名称、保护状态和过期预览；支持循环换名与撤销。
+- **聚焦**：跟随活动单元格的临时透明行列覆盖层，可调颜色、不透明度、跟随间隔及保留中心单元格。不会写入格式、条件格式或工作簿；目前用于普通工作表视图。
+- **转为文本 / 数值**：只处理选择区域内的常量，支持不连续区域。默认将“常规对齐”固定为原来的左右视觉位置；保留显式对齐、缩进及其他格式。转文本使用底层数值，不把显示格式转成文字；日期数值会成为序列号文本。
+- **转换保护**：默认跳过前导零和超过 15 位有效数字的文本；公式、合并单元格、锁定单元格等不转换。绿色角标由 Excel 自身的后台错误检查控制。
+- **统一设置与撤销**：Ribbon 独立设置入口；最近一次成功的重命名 / 转换可用 GridPilot 的撤销按钮恢复。目标被再次编辑时拒绝覆盖，关闭 Excel 后不保留撤销记录，修改不自动保存工作簿。
+- **自绘图标**：GDI+ 按像素尺寸绘制并由 Ribbon 加载，替代 Office 内置图标；实际 Excel 2010 高 DPI 清晰度仍需目标机验收。
 
 - 范围切换：当前工作簿 / 同一 Excel 进程内所有已打开工作簿。
 - 枚举工作表、图表页、隐藏页和 VeryHidden 页，保留原始顺序。
@@ -39,15 +46,20 @@ Excel-DNA 创建 Ribbon 和任务面板时会做当前用户的临时 COM 注册
 
 ## 布局与偏好
 
-点击右上角“设置”，修改立即生效，约 400ms 后自动写入 XLL 同目录的 `SheetPilot.settings.json`，退出时补存。数字输入用 Enter 或失焦提交，Esc 撤销；无效内容保留原值。支持停靠位置、宽度、行高、行间距、字号、序号、页面类型、品牌标题栏、底部信息、快捷键提示和刷新开关/间隔，以及悬停提示和配色。范围、正则、大小写、隐藏页也会保存，搜索词不保存。
+点击右上角“设置”，修改立即生效，约 400ms 后自动写入 XLL 同目录的 `GridPilot.navigation.json`，退出时补存。数字输入用 Enter 或失焦提交，Esc 撤销；无效内容保留原值。支持停靠位置、宽度、行高、行间距、字号、序号、页面类型、品牌标题栏、底部信息、快捷键提示和刷新开关/间隔，以及悬停提示和配色。范围、正则、大小写、隐藏页也会保存，搜索词不保存。
 
 配置采用同目录原子替换，保留 `.bak`；只读目录会明确提示仅本次有效，不自动写到其他目录。未知配置版本不会被覆盖。独立 Excel 进程之间以最后保存者为准，不做实时同步。
+
+统一工具设置存为 `GridPilot.tools.json`。升级后若没有新导航配置，会从同目录旧 `SheetPilot.settings.json` 复制偏好；旧文件保留。升级前取消旧 XLL 的自动加载，避免新旧版本同时运行。
 
 左右拖动停靠和调整宽度也会记录；浮动/上下停靠不作为重启位置保存。升级请退出 Excel 后替换 XLL，并保留配置文件。详见 [设置说明](SETTINGS.txt)。
 
 <img src="docs/navigation-settings.png" width="340" alt="布局与偏好设置" />
 <img src="docs/navigation-dark.png" width="340" alt="深色导航面板" />
 <img src="docs/navigation-colors.png" width="340" alt="提示开关及自定义颜色" />
+
+<img src="docs/rename-preview.png" width="900" alt="批量重命名预览" />
+<img src="docs/tools-settings.png" width="440" alt="统一工具设置" />
 
 ## 架构与扩展
 
@@ -74,7 +86,7 @@ powershell -NoProfile -File .\build.ps1
 
 脚本使用依赖锁文件，构建双位数 XLL、运行基础测试并输出 `dist/`。构建与基础测试不要求安装 Excel。
 
-已完成 88 项基础及 Excel 16 集成断言、85 项包含控件渲染的基础断言；两组有重复检查，不能相加作为独立测试数。实际 CTP 验证了默认右侧 320 宽度、重新启动后读取配置的左侧 380 宽度，以及正常退出测试 Excel 实例。
+测试包括纯逻辑、WPF 渲染及 Excel 16 实际 COM / XLL 加载。覆盖重名和过期预览、跨工作簿操作、常量转换与对齐恢复、覆盖层不修改工作簿、导航停靠与退出。具体结果见 VALIDATION.txt；这些测试不能代替旧版 Excel 验收。
 
 **Windows 10 + Excel 2010 标准版的任务栏文件切换、退出、停靠和 x86 加载尚未验收。** 未据新版 Excel 的测试结果保证旧版兼容性。
 

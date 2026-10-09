@@ -6,7 +6,7 @@ using SheetPilot.Core;
 
 namespace SheetPilot.Excel
 {
-    public sealed class ExcelGateway : IWorkbookGateway
+    public sealed partial class ExcelGateway : IWorkbookGateway
     {
         private readonly Func<object> application;
         private readonly int threadId = Thread.CurrentThread.ManagedThreadId;

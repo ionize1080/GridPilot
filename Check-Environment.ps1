@@ -1,6 +1,6 @@
 param([string]$ExcelPath)
 $ErrorActionPreference = 'Stop'
-Write-Host 'SheetPilot environment check (read-only)'
+Write-Host 'GridPilot environment check (read-only)'
 $release = (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full' -ErrorAction SilentlyContinue).Release
 if ($release -ge 394802) { Write-Host '.NET Framework 4.6.2 or later: OK' }
 else { Write-Warning '.NET Framework 4.6.2 or later is required. No software will be installed by this script.' }
@@ -32,8 +32,8 @@ try {
 Write-Host ('Excel: ' + $ExcelPath)
 Write-Host ('Version: ' + (Get-Item -LiteralPath $ExcelPath).VersionInfo.ProductVersion)
 switch ($machine) {
-    0x014c { Write-Host 'Use SheetPilot-x86.xll (32-bit Excel).' }
-    0x8664 { Write-Host 'Use SheetPilot-x64.xll (64-bit Excel).' }
+    0x014c { Write-Host 'Use GridPilot-x86.xll (32-bit Excel).' }
+    0x8664 { Write-Host 'Use GridPilot-x64.xll (64-bit Excel).' }
     default { Write-Warning ('Unsupported Excel machine type: ' + $machine) }
 }
 Write-Host 'No installation, registry changes, or Excel launch was performed.'

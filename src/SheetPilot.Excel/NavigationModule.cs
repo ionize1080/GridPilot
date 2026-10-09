@@ -49,13 +49,17 @@ namespace SheetPilot.Excel
         private readonly Timer saveTimer;
         private readonly SettingsStore store;
         private readonly NavigationSettings settings;
+        public NavigationSettings Settings => settings;
         private readonly NativeLayoutGuard nativeLayout = new NativeLayoutGuard();
         private bool settingsDirty;
         private bool queued, disposed;
         public NavigationModule(IWorkbookGateway gateway)
         {
             this.gateway = gateway;
-            store = new SettingsStore(Path.Combine(Path.GetDirectoryName(ExcelDnaUtil.XllPath), "SheetPilot.settings.json"));
+            string directory = Path.GetDirectoryName(ExcelDnaUtil.XllPath);
+            string current = Path.Combine(directory, "GridPilot.navigation.json"), legacy = Path.Combine(directory, "SheetPilot.settings.json");
+            if (!File.Exists(current) && File.Exists(legacy)) { try { File.Copy(legacy, current); } catch { current = legacy; } }
+            store = new SettingsStore(current);
             settings = store.Load();
             timer = new Timer { Interval = settings.RefreshSeconds * 1000 };
             timer.Tick += (s,e) => Refresh();
@@ -93,11 +97,16 @@ namespace SheetPilot.Excel
             foreach (var session in sessions.Values) { session.Model.SettingsStatus = store.Status; session.Model.SettingsSaveFailed = store.HasError; }
         }
         public string Id => "SheetPilot_Navigation";
-        public string Label => "工作簿工具";
+        public string Label => "导航";
         public IEnumerable<FeatureCommand> Commands => new[] {
             new FeatureCommand("SheetPilot_Show", "工作表导航", "显示可搜索的页面目录，支持正则表达式与跨工作簿跳转。", "GoTo", Show),
             new FeatureCommand("SheetPilot_Refresh", "刷新目录", "重新读取页面、顺序及隐藏状态。", "RefreshAll", Refresh)
         };
+        public void ShowSettings()
+        {
+            Show();
+            if (sessions.TryGetValue(ExcelDnaUtil.WindowHandle, out var session)) session.Model.IsSettingsOpen = true;
+        }
         public void Show()
         {
             if (disposed) return;
@@ -203,7 +212,7 @@ namespace SheetPilot.Excel
                 try
                 {
                     // Use Office's docking/parent mechanism; no SetParent, owner hacks, or embedded browser.
-                    Pane = CustomTaskPaneFactory.CreateCustomTaskPane(control, "SheetPilot");
+                    Pane = CustomTaskPaneFactory.CreateCustomTaskPane(control, "GridPilot");
                     if (Pane == null) throw new InvalidOperationException("Office 无法创建任务面板，请检查当前用户的加载项权限。");
                     ApplyLayout();
                     Pane.DockPositionStateChange += DockChanged;

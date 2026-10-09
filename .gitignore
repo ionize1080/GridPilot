@@ -5,3 +5,6 @@ dist/
 preview/
 *.user
 SheetPilot.settings.json*
+
+GridPilot.navigation.json*
+GridPilot.tools.json*

@@ -12,11 +12,14 @@ namespace SheetPilot.Excel
     {
         internal static FeatureRegistry Features;
         internal static NavigationModule Navigation;
+        internal static ToolsModule Tools;
         public void AutoOpen()
         {
             Features = new FeatureRegistry();
-            Navigation = new NavigationModule(new ExcelGateway(() => ExcelDnaUtil.Application));
+            var gateway = new ExcelGateway(() => ExcelDnaUtil.Application);
+            Navigation = new NavigationModule(gateway);
             Features.Add(Navigation);
+            Tools = new ToolsModule(gateway, Navigation); Features.Add(Tools);
             Log.Write("Loaded " + (Environment.Is64BitProcess ? "x64" : "x86") + "; Excel " + ExcelDnaUtil.ExcelVersion);
         }
         public void AutoClose() => Shutdown();
@@ -27,7 +30,7 @@ namespace SheetPilot.Excel
             catch (Exception ex) { Log.Error("Unload", ex); }
             finally
             {
-                Features = null; Navigation = null; Log.Write("Unloaded");
+                Features = null; Navigation = null; Tools = null; Log.Write("Unloaded");
                 // Unreachable Office RCWs can otherwise survive in an idle automation host.
                 // Do not block the Excel STA: COM finalizers may need to marshal back to it.
                 System.Threading.ThreadPool.QueueUserWorkItem(_ =>
@@ -36,16 +39,23 @@ namespace SheetPilot.Excel
                 });
             }
         }
-        [ExcelCommand(Name = "SheetPilot_ShowNavigation", Description = "显示 SheetPilot 工作表导航")]
+        [ExcelCommand(Name = "SheetPilot_ShowNavigation", Description = "显示 GridPilot 工作表导航")]
         public static void ShowNavigation() => Guard(() => Navigation?.Show());
+        [ExcelCommand(Name = "GridPilot_ShowNavigation")] public static void GridPilotNavigation() => ShowNavigation();
+        [ExcelCommand(Name = "GridPilot_Rename")] public static void Rename() => Guard(() => Tools?.Execute("GridPilot_Rename"));
+        [ExcelCommand(Name = "GridPilot_Focus")] public static void Focus() => Guard(() => Tools?.Execute("GridPilot_Focus"));
+        [ExcelCommand(Name = "GridPilot_Text")] public static void Text() => Guard(() => Tools?.Execute("GridPilot_Text"));
+        [ExcelCommand(Name = "GridPilot_Number")] public static void Number() => Guard(() => Tools?.Execute("GridPilot_Number"));
+        [ExcelCommand(Name = "GridPilot_Undo")] public static void Undo() => Guard(() => Tools?.Execute("GridPilot_Undo"));
+        [ExcelCommand(Name = "GridPilot_Settings")] public static void Settings() => Guard(() => Tools?.Execute("GridPilot_Settings"));
         internal static void Guard(Action action)
         {
             try { action(); }
             catch (Exception ex)
             {
                 Log.Error("Command", ex);
-                System.Windows.Forms.MessageBox.Show("SheetPilot 无法完成此操作。\n" + ex.Message + "\n\n诊断日志：" + Log.Path,
-                    "SheetPilot", System.Windows.Forms.MessageBoxButtons.OK, System.Windows.Forms.MessageBoxIcon.Information);
+                System.Windows.Forms.MessageBox.Show("GridPilot 无法完成此操作。\n" + ex.Message + "\n\n诊断日志：" + Log.Path,
+                    "GridPilot", System.Windows.Forms.MessageBoxButtons.OK, System.Windows.Forms.MessageBoxIcon.Information);
             }
         }
     }
@@ -54,6 +64,14 @@ namespace SheetPilot.Excel
     [Guid("74C45697-E294-4FA3-AF4B-2315D65F68C6")]
     public sealed class Ribbon : ExcelRibbon
     {
+        private static IRibbonUI ui;
+        public void OnLoad(IRibbonUI ribbon) { ui = ribbon; }
+        public static void Refresh() { try { ui?.Invalidate(); } catch { } }
+        public override object LoadImage(string imageId) => RibbonIcons.Get(imageId, ExcelDnaUtil.WindowHandle);
+        public bool GetPressed(IRibbonControl control) => AddIn.Tools?.FocusEnabled == true;
+        public bool GetEnabled(IRibbonControl control) => control.Id != "GridPilot_Undo" || AddIn.Tools?.CanUndo == true;
+        public void OnToggle(IRibbonControl control, bool pressed) => OnCommand(control);
+
         public override void OnBeginShutdown(ref Array custom)
         {
             AddIn.Shutdown();
@@ -62,30 +80,36 @@ namespace SheetPilot.Excel
         public override void OnDisconnection(ExcelDna.Integration.Extensibility.ext_DisconnectMode mode, ref Array custom)
         {
             AddIn.Shutdown();
+            ui = null; RibbonIcons.Release();
             base.OnDisconnection(mode, ref custom);
         }
         public override string GetCustomUI(string ribbonId)
         {
             XNamespace ns = "http://schemas.microsoft.com/office/2009/07/customui";
-            var tab = new XElement(ns + "tab", new XAttribute("id", "SheetPilot_Tab"), new XAttribute("label", "SheetPilot"));
+            var tab = new XElement(ns + "tab", new XAttribute("id", "SheetPilot_Tab"), new XAttribute("label", "GridPilot"));
             if (AddIn.Features != null)
                 foreach (var module in AddIn.Features.Modules)
                 {
                     var group = new XElement(ns + "group", new XAttribute("id", module.Id), new XAttribute("label", module.Label));
                     foreach (var command in module.Commands)
-                        group.Add(new XElement(ns + "button", new XAttribute("id", command.Id), new XAttribute("label", command.Label),
-                            new XAttribute("size", "large"), new XAttribute("imageMso", command.ImageMso), new XAttribute("screentip", command.Label),
-                            new XAttribute("supertip", command.Description), new XAttribute("onAction", "OnCommand")));
+                    {
+                        bool toggle = command.Id == "GridPilot_Focus";
+                        var button = new XElement(ns + (toggle ? "toggleButton" : "button"), new XAttribute("id", command.Id), new XAttribute("label", command.Label),
+                            new XAttribute("size", "large"), new XAttribute("image", command.Id), new XAttribute("screentip", command.Label),
+                            new XAttribute("supertip", command.Description), new XAttribute("getEnabled", "GetEnabled"), new XAttribute("onAction", toggle ? "OnToggle" : "OnCommand"));
+                        if (toggle) button.Add(new XAttribute("getPressed", "GetPressed"));
+                        group.Add(button);
+                    }
                     tab.Add(group);
                 }
-            return new XElement(ns + "customUI", new XElement(ns + "ribbon", new XElement(ns + "tabs", tab))).ToString();
+            return new XElement(ns + "customUI", new XAttribute("loadImage", "LoadImage"), new XAttribute("onLoad", "OnLoad"), new XElement(ns + "ribbon", new XElement(ns + "tabs", tab))).ToString();
         }
         public void OnCommand(IRibbonControl control) => AddIn.Guard(() => AddIn.Features?.Execute(control.Id));
     }
 
     internal static class Log
     {
-        internal static string Path => System.IO.Path.Combine(System.IO.Path.GetTempPath(), "SheetPilot-" + System.Diagnostics.Process.GetCurrentProcess().Id + ".log");
+        internal static string Path => System.IO.Path.Combine(System.IO.Path.GetTempPath(), "GridPilot-" + System.Diagnostics.Process.GetCurrentProcess().Id + ".log");
         internal static void Write(string message)
         {
             try
