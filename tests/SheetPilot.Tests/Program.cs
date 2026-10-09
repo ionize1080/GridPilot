@@ -22,10 +22,12 @@ internal static partial class Program
     {
         try
         {
+            if(args.Length>2 && args[0]=="--interactive") { InteractiveTests(Path.GetFullPath(args[1]),Path.GetFullPath(args[2])); return 0; }
             SearchTests();
             SettingsTests();
             PreferenceTests();
             FeatureCoreTests();
+            RegressionTests();
             FeatureRenderTests(args.Length > 1 && args[0] == "--render" ? args[1] : null);
             UiTests(args.Length > 1 && args[0] == "--render" ? args[1] : null);
             if (args.Length > 1 && args[0] == "--excel")

@@ -17,32 +17,54 @@ namespace SheetPilot.Excel
     public sealed class FocusOverlay : IDisposable
     {
         private readonly Func<object> application;
-        private readonly Action<Action> queue;
         private readonly ToolPreferences settings;
         private readonly Timer timer = new Timer();
+        private readonly ExcelEvents events;
+        private readonly Dictionary<Rectangle, Rectangle> edges = new Dictionary<Rectangle, Rectangle>();
         private Layer layer;
         private IntPtr owner;
-        private bool pending, disposed;
-        private string signature;
+        private bool updating, disposed;
+        private string signature, motion;
+        private int lastMotion;
+        public int UpdateCount { get; private set; }
+        public double LastUpdateMilliseconds { get; private set; }
+        private readonly Queue<double> timings = new Queue<double>();
+        public string PerformanceSummary
+        {
+            get { var values=timings.OrderBy(v=>v).ToArray(); return values.Length==0?"No focus samples":"Focus updates="+UpdateCount+"; recent="+values.Length+"; p50="+values[values.Length/2].ToString("F2",System.Globalization.CultureInfo.InvariantCulture)+"ms; p95="+values[Math.Min(values.Length-1,(int)(values.Length*.95))].ToString("F2",System.Globalization.CultureInfo.InvariantCulture)+"ms; max="+values.Last().ToString("F2",System.Globalization.CultureInfo.InvariantCulture)+"ms"; }
+        }
         public bool Enabled { get; private set; }
         public bool IsVisible => layer?.Visible == true;
         public FocusOverlay(Func<object> application, Action<Action> queue, ToolPreferences settings)
-        { this.application = application; this.queue = queue; this.settings = settings; timer.Tick += (s,e) => Pulse(); }
-        public void Toggle() { Enabled = !Enabled; if (Enabled) { timer.Interval = settings.FocusInterval; timer.Start(); Pulse(); } else { timer.Stop(); layer?.Hide(); } }
-        private void Pulse()
         {
-            if (disposed || !Enabled) return;
-            if (owner != IntPtr.Zero && GetForegroundWindow() != owner) layer?.Hide();
-            if (pending) return; pending = true;
-            try { queue(() => { pending = false; if (disposed || !Enabled) return; try { Update(); } catch { layer?.Hide(); } }); }
-            catch { pending = false; layer?.Hide(); }
+            this.application = application; this.settings = settings; timer.Tick += (s,e) => Pulse(false);
+            events = new ExcelEvents(application());
+            try { events.Selection(() => Pulse(true)); events.Activation(() => { motion = null; edges.Clear(); Pulse(true); }); }
+            catch (COMException) { /* The lightweight timer remains a fallback on restricted hosts. */ }
         }
-        private void Update()
+        public void Toggle() { Enabled = !Enabled; if (Enabled) { timer.Interval = Math.Max(16, Math.Min(100, settings.FocusInterval)); timer.Start(); Pulse(true); } else { timer.Stop(); layer?.Hide(); } }
+        private void Pulse(bool immediate)
         {
+            if (disposed || !Enabled || updating) return;
+            updating = true;
+            try { Update(immediate); } catch { layer?.Hide(); motion = null; }
+            finally { updating = false; }
+        }
+        private void Update(bool immediate)
+        {
+            var watch = System.Diagnostics.Stopwatch.StartNew();
             dynamic app = application(); IntPtr hwnd = ActiveWindowHandle(app);
             if (GetForegroundWindow() != hwnd || IsIconic(hwnd) || !(bool)app.Ready) { layer?.Hide(); return; }
-            timer.Interval = Math.Max(50, Math.Min(500, settings.FocusInterval));
-            var frame = Capture(application(), settings);
+            timer.Interval = unchecked(Environment.TickCount-lastMotion)>250 ? 100 : Math.Max(16, Math.Min(100, settings.FocusInterval));
+            dynamic window = app.ActiveWindow;
+            GetClientRect(hwnd, out Rect bounds);
+            var origin = new Point(); ClientToScreen(hwnd, ref origin);
+            string nextMotion = hwnd + "|" + origin + "|" + bounds.Right + ":" + bounds.Bottom + "|" + window.ScrollRow + ":" + window.ScrollColumn + ":" + window.Zoom + ":" + window.View + "|" + app.ActiveCell.Address + "|" + settings.FocusColor + settings.FocusOpacity + settings.FocusRow + settings.FocusColumn + settings.ClearActiveCell;
+            if (!immediate && motion == nextMotion && IsVisible) return;
+            lastMotion=Environment.TickCount;
+            if (edges.Count > 64 || owner != hwnd) edges.Clear();
+            var frame = Capture(application(), settings, edges);
+            motion = nextMotion;
             if (frame.Bands.Length == 0) { layer?.Hide(); return; }
             if (owner != hwnd) { layer?.Dispose(); layer = null; owner = hwnd; signature = null; }
             if (layer == null) layer = new Layer();
@@ -55,8 +77,11 @@ namespace SheetPilot.Excel
                 layer.BackColor = ColorTranslator.FromHtml(settings.FocusColor); layer.Opacity = Math.Max(.05, Math.Min(.6, settings.FocusOpacity / 100.0)); signature = next;
             }
             if (!layer.Visible) layer.Show(new Owner(hwnd));
+            LastUpdateMilliseconds = watch.Elapsed.TotalMilliseconds; UpdateCount++;
+            timings.Enqueue(LastUpdateMilliseconds); if(timings.Count>256)timings.Dequeue();
         }
-        public static FocusFrame Capture(object application, ToolPreferences settings)
+        public static FocusFrame Capture(object application, ToolPreferences settings) => Capture(application, settings, null);
+        private static FocusFrame Capture(object application, ToolPreferences settings, Dictionary<Rectangle, Rectangle> edges)
         {
             dynamic app = application, sheet = app.ActiveSheet, window = app.ActiveWindow;
             if (sheet == null || window == null || Microsoft.VisualBasic.Information.TypeName((object)sheet).TrimStart('_') != "Worksheet" || (int)window.View != 1) return new FocusFrame();
@@ -67,7 +92,10 @@ namespace SheetPilot.Excel
             for (int i = 1; i <= (int)panes.Count; i++)
             {
                 dynamic pane = panes.Item[i], visible = pane.VisibleRange;
-                var viewport = ClipToCells(window, Rectangle.Intersect(grid, ScreenRect(pane, visible)));
+                var raw = Rectangle.Intersect(grid, ScreenRect(pane, visible));
+                Rectangle viewport = Rectangle.Empty;
+                if (edges == null || !edges.TryGetValue(raw, out viewport))
+                { viewport = ClipToCells(window, raw); if (edges != null) edges[raw] = viewport; }
                 regions.Add(Tuple.Create(viewport, ScreenRect(pane, cell)));
             }
             var bands = new List<Rectangle>();
@@ -139,7 +167,7 @@ namespace SheetPilot.Excel
             EnumChildWindows(owner, (handle, p) => { var name = new StringBuilder(64); GetClassName(handle, name, name.Capacity); if (name.ToString() == "EXCEL7" && IsWindowVisible(handle)) { GetClientRect(handle, out Rect r); var point = new Point(r.Left, r.Top); ClientToScreen(handle, ref point); var candidate = new Rectangle(point.X, point.Y, r.Right-r.Left, r.Bottom-r.Top); if ((long)candidate.Width*candidate.Height > (long)result.Width*result.Height) result = candidate; } return true; }, IntPtr.Zero);
             return result;
         }
-        public void Dispose() { if (disposed) return; disposed = true; Enabled = false; timer.Dispose(); layer?.Dispose(); }
+        public void Dispose() { if (disposed) return; disposed = true; Enabled = false; events.Dispose(); timer.Dispose(); layer?.Dispose(); }
         private sealed class Owner : IWin32Window { public Owner(IntPtr handle) { Handle = handle; } public IntPtr Handle { get; } }
         private sealed class Layer : Form
         {

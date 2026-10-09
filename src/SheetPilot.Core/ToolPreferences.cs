@@ -43,7 +43,7 @@ namespace SheetPilot.Core
         [DataMember] public bool FocusRow { get; set; } = true;
         [DataMember] public bool FocusColumn { get; set; } = true;
         [DataMember] public bool ClearActiveCell { get; set; } = true;
-        [DataMember] public int FocusInterval { get; set; } = 100;
+        [DataMember] public int FocusInterval { get; set; } = 33;
         [DataMember] public bool PreserveVisualAlignment { get; set; } = true;
         [DataMember] public bool VisibleCellsOnly { get; set; }
         [DataMember] public bool PreserveLeadingZeros { get; set; } = true;
@@ -55,12 +55,12 @@ namespace SheetPilot.Core
         [DataMember] public int ConversionLimit { get; set; } = 50000;
         [DataMember] public int DecimalCulture { get; set; }
         [OnDeserializing] private void Initialize(StreamingContext c)
-        { SchemaVersion = 1; Rename = new RenameOptions(); FocusColor = "#42AD91"; FocusOpacity = 20; FocusInterval = 100; PreserveVisualAlignment = FocusRow = FocusColumn = ClearActiveCell = PreserveLeadingZeros = ProtectPrecision = TrimNumericText = AllowThousands = NumberAsTextHint = true; ConversionLimit = 50000; }
+        { SchemaVersion = 1; Rename = new RenameOptions(); FocusColor = "#42AD91"; FocusOpacity = 20; FocusInterval = 33; PreserveVisualAlignment = FocusRow = FocusColumn = ClearActiveCell = PreserveLeadingZeros = ProtectPrecision = TrimNumericText = AllowThousands = NumberAsTextHint = true; ConversionLimit = 50000; }
         public void Normalize()
         {
             if (Rename == null) Rename = new RenameOptions();
             FocusColor = PreferenceInput.TryColor(FocusColor, out var color) ? color : "#42AD91";
-            FocusOpacity = Math.Max(5, Math.Min(60, FocusOpacity)); FocusInterval = Math.Max(50, Math.Min(500, FocusInterval));
+            FocusOpacity = Math.Max(5, Math.Min(60, FocusOpacity)); FocusInterval = Math.Max(16, Math.Min(100, FocusInterval));
             ConversionLimit = Math.Max(100, Math.Min(200000, ConversionLimit)); DecimalCulture = Math.Max(0, Math.Min(1, DecimalCulture));
             Rename.Start = Math.Max(0, Math.Min(1000000, Rename.Start)); Rename.Step = Math.Max(1, Math.Min(1000, Rename.Step)); Rename.Digits = Math.Max(1, Math.Min(10, Rename.Digits));
         }

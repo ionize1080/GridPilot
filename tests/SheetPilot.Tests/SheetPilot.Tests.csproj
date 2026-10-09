@@ -6,6 +6,7 @@
   <Compile Include="../../src/SheetPilot.Excel/ExcelGateway.cs" Link="ExcelGateway.cs"/>
   <Compile Include="../../src/SheetPilot.Excel/WorkbookOperations.cs" Link="WorkbookOperations.cs"/>
   <Compile Include="../../src/SheetPilot.Excel/FocusOverlay.cs" Link="FocusOverlay.cs"/>
+  <Compile Include="../../src/SheetPilot.Excel/ExcelEvents.cs" Link="ExcelEvents.cs"/>
   <Compile Include="../../src/SheetPilot.Excel/RibbonIcons.cs" Link="RibbonIcons.cs"/>
   <Reference Include="Microsoft.CSharp"/>
   <Reference Include="Microsoft.VisualBasic"/>

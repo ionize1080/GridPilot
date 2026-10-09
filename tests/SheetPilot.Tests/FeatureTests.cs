@@ -52,6 +52,9 @@ internal static partial class Program
         rename.RefreshSources(); RenderWindowContent(rename, Path.Combine(directory,"rename-preview.png"), 1060, 720, 96); rename.Close();
         var settings = new PreferencesWindow(preferences, colors, () => "已保存", () => {});
         RenderWindowContent(settings, Path.Combine(directory,"tools-settings.png"), 620, 740, 96); settings.Close();
+        var paletteWindow=new Window(); ToolUiTheme(paletteWindow,colors);
+        paletteWindow.Content=new ColorPalette {Value="#2563EB",Margin=new Thickness(16)};
+        RenderWindowContent(paletteWindow,Path.Combine(directory,"color-palette.png"),292,354,96);paletteWindow.Close();
         using(var montage = new System.Drawing.Bitmap(8*80,100)) using(var graphics=System.Drawing.Graphics.FromImage(montage))
         {
             graphics.Clear(System.Drawing.Color.FromArgb(247,249,247)); int index=0;
@@ -123,8 +126,12 @@ internal static partial class Program
             Check(geometry.Bands.Length>=2 && geometry.Bands.All(b=>geometry.Viewport.Contains(b)) && geometry.Bands.All(b => app.ActiveWindow.RangeFromPoint(b.Right-1,b.Bottom-1) != null),"focus COM: row and column bands clipped to visible grid");
             using(var focus = new FocusOverlay(()=>application,action=>action(),settings))
             {
-                focus.Toggle(); var wait=System.Diagnostics.Stopwatch.StartNew();PumpUntil(()=>wait.ElapsedMilliseconds>250);
+                SetForegroundWindow(FocusOverlay.ActiveWindowHandle(application)); focus.Toggle(); PumpUntil(()=>focus.IsVisible,3000);
                 Check(focus.IsVisible, "focus COM: owned transparent overlay actually visible");
+                int updates=focus.UpdateCount; alpha.Range["D4"].Select();
+                Check(focus.UpdateCount>updates,"focus COM: selection event renders synchronously without timer or queued macro");
+                alpha.Range["C3"].Select();
+                Console.WriteLine(focus.PerformanceSummary);
                 using (var screenshot = new System.Drawing.Bitmap(geometry.Viewport.Width, geometry.Viewport.Height)) using (var graphics = System.Drawing.Graphics.FromImage(screenshot)) { graphics.CopyFromScreen(geometry.Viewport.Location, System.Drawing.Point.Empty, geometry.Viewport.Size); screenshot.Save(Path.Combine(directory,"focus-overlay.png"),System.Drawing.Imaging.ImageFormat.Png); }
                 Check(focus.Enabled && FormatSnapshot(alpha.Range["C3"])==before && (bool)book.Saved==saved && (int)alpha.Cells.FormatConditions.Count==conditions,"focus COM: overlay leaves formatting rules and dirty state unchanged");
                 focus.Toggle(); Check(!focus.Enabled,"focus COM: toggle removes overlay");
@@ -136,5 +143,7 @@ internal static partial class Program
         finally { app.Visible=visible; if(book!=null)book.Close(false); foreach(var item in owned.AsEnumerable().Reverse()) if(Marshal.IsComObject(item))Marshal.FinalReleaseComObject(item); }
     }
     [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr window);
+    private static void ToolUiTheme(Window window,NavigationSettings colors)
+    {window.Resources.MergedDictionaries.Add(new ResourceDictionary {Source=new Uri("/SheetPilot.UI;component/Styles.xaml",UriKind.Relative)});using(var model=new NavigationModel(colors)) using(var view=new NavigationView(model)) window.Resources=view.Resources;window.FontFamily=new System.Windows.Media.FontFamily("Microsoft YaHei UI");window.FontSize=12;}
     private static string FormatSnapshot(dynamic cell) => string.Join("|",new object[]{cell.NumberFormat,cell.HorizontalAlignment,cell.VerticalAlignment,cell.IndentLevel,cell.WrapText,cell.Font.Bold,cell.Interior.Color});
 }

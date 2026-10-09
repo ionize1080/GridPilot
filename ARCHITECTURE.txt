@@ -160,3 +160,20 @@ FocusOverlay 使用拥有者为当前 Excel 窗口的无激活、鼠标穿透透
 覆盖层不更改单元格/条件格式/工作簿 Saved 状态；不随保存和打印输出。
 RibbonIcons 通过 GDI+ 直接生成透明 32bit 位图，按宿主 DPI 提供图标，释放缓存随 Ribbon 断开。
 Styles.xaml、NumberEditor 和 ColorEditor 由导航及工具窗口共同使用。
+
+9. v0.5 事件、性能与 DPI
+
+ExcelEvents 使用 AppEvents 的 COM connection point，仅订阅选区与窗口/Sheet 激活事件，
+不依赖 Office PIA。订阅在 Dispose 成对解除。导航激活事件合并到安全宏队列，读取一次快照
+后同步所有可见面板；活动项变化无需重新执行正则或180ms防抖。重复 Sheet key 通过 WorkbookKey
+复合身份区分。跳转到新窗口延续导航并复制当次搜索词。
+FocusOverlay 的选区事件在 Excel 主线程同步读取几何并更新透明层，不经过 QueueAsMacro。
+窗口移动/滚动/缩放由轻量指纹补偿，最多64个可视边界缓存；没有变化时不重建 Region。
+空闲时降低补偿频率；前台/Ready/最小化检查仍保留。此实现不宣称跨机器硬实时或零延迟。
+内部诊断宏 GridPilot_Diagnostics 输出最近最多256次更新的分位数，不记录单元格内容或坐标。
+
+Navigation PaneWidth 改为逻辑像素，设置/读取原生 Width 时用宿主 DPI 双向换算，避免200%下
+MinWidth与CTP物理像素不一致造成裁切。旧版本保存的数字不改名，升级后相同值在高DPI下会
+获得完整逻辑宽度；用户可重新拖动调整。
+ColorPalette 使用 WPF 渐变直接绘制 HSV 二维色盘和色相条，保留 HEX 输入；弹出层隶属原控件，
+卸载时关闭，导航/统一工具设置复用。不引入浏览器组件。

@@ -1,8 +1,8 @@
-GridPilot 0.4.0 — 便携式 Excel 工具集
+GridPilot 0.5.0 — 便携式 Excel 工具集
 ========================================
 
 交付目标：Windows 10 + Excel 2010 标准版，提供 x86 / x64 两种单文件 XLL。
-这是可运行预发布版本；目标机验收状态请看 VALIDATION.txt。
+这是正式 Release；本机 Excel16 x64 已验证，Excel2010 仍需目标机验收。详情见 VALIDATION.txt。
 
 快速使用
 --------

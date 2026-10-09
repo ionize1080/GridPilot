@@ -62,7 +62,7 @@ namespace SheetPilot.UI
             var panel = new StackPanel { Margin = new Thickness(0, 0, 14, 12) }; root.Children.Add(ToolUi.Scroll(panel));
             panel.Children.Add(ToolUi.Heading("聚焦 · 临时行列高亮"));
             var color = new ColorEditor { Caption = "高亮颜色" }; ToolUi.Bind(color, ColorEditor.ValueProperty, preferences, "FocusColor"); panel.Children.Add(color);
-            ToolUi.Number(panel, preferences, "FocusOpacity", "不透明度（%）", 5, 60); ToolUi.Number(panel, preferences, "FocusInterval", "跟随间隔（毫秒）", 50, 500);
+            ToolUi.Number(panel, preferences, "FocusOpacity", "不透明度（%）", 5, 60); ToolUi.Number(panel, preferences, "FocusInterval", "滚动补偿间隔（毫秒，选区实时跟随）", 16, 100);
             ToolUi.Check(panel, preferences, "FocusRow", "高亮当前行"); ToolUi.Check(panel, preferences, "FocusColumn", "高亮当前列"); ToolUi.Check(panel, preferences, "ClearActiveCell", "保持活动单元格清晰，不覆盖它");
             panel.Children.Add(ToolUi.Note("覆盖层不写入单元格，不随文件保存或打印；再次点击「聚焦」关闭。每次启动默认关闭。"));
             panel.Children.Add(ToolUi.Heading("文本 / 数值转换"));

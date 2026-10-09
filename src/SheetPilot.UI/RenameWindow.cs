@@ -30,34 +30,54 @@ namespace SheetPilot.UI
         {
             this.preferences = preferences; this.capture = capture; this.apply = apply; this.save = save;
             ToolUi.Theme(this, colors, "批量重命名", 1100, 800);
-            var root = new DockPanel { Margin = new Thickness(18) }; Content = root;
-            var bottom = new StackPanel { Margin = new Thickness(0, 12, 0, 0) }; DockPanel.SetDock(bottom, Dock.Bottom); root.Children.Add(bottom);
-            status = ToolUi.Note("准备预览…"); bottom.Children.Add(status);
-            var actions = new StackPanel { Orientation = Orientation.Horizontal }; bottom.Children.Add(actions);
-            applyButton = ToolUi.Button(actions, "应用预览", ApplyPreview);
-            ToolUi.Button(actions, "刷新页面", RefreshSources); ToolUi.Button(actions, "保存为默认规则", () => { Commit(); status.Text = save(); }); ToolUi.Button(actions, "关闭", Close);
-            var columns = new Grid(); columns.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(290) }); columns.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(16) }); columns.ColumnDefinitions.Add(new ColumnDefinition()); root.Children.Add(columns);
-            var inputs = ToolUi.RenameControls(preferences.Rename, true); inputs.Margin = new Thickness(0, 0, 12, 8); columns.Children.Add(ToolUi.Scroll(inputs));
-            var preview = new DockPanel(); Grid.SetColumn(preview, 2); columns.Children.Add(preview);
-            var title = ToolUi.Heading("应用前预览"); DockPanel.SetDock(title, Dock.Top); preview.Children.Add(title);
-            var note = ToolUi.Note("勾选要处理的页面；重名和非法名称会阻止应用。结构受保护或只读工作簿在应用前统一检查。"); DockPanel.SetDock(note, Dock.Top); preview.Children.Add(note);
-            var selection = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 3, 0, 10) }; DockPanel.SetDock(selection, Dock.Top); preview.Children.Add(selection);
-            ToolUi.Button(selection, "全选", () => { excluded.Clear(); BuildPreview(); }); ToolUi.Button(selection, "全不选", () => { foreach (var source in sources) excluded.Add(RenamePlanner.Key(source)); BuildPreview(); });
-            grid = new DataGrid { AutoGenerateColumns = false, CanUserAddRows = false, CanUserDeleteRows = false, CanUserSortColumns = false, MinColumnWidth = 110, SelectionMode = DataGridSelectionMode.Single, HeadersVisibility = DataGridHeadersVisibility.Column, GridLinesVisibility = DataGridGridLinesVisibility.Horizontal, RowHeight = 36, BorderThickness = new Thickness(0), EnableRowVirtualization = true };
+            var root = new DockPanel { Margin = new Thickness(24) }; Content = root;
+            var heading = new StackPanel { Margin = new Thickness(0,0,0,20) }; DockPanel.SetDock(heading,Dock.Top); root.Children.Add(heading);
+            heading.Children.Add(new TextBlock { Text="批量重命名", FontSize=22, FontWeight=FontWeights.SemiBold });
+            heading.Children.Add(ToolUi.Note("设置规则，核对新名称，再应用到所选页面。"));
+            var bottom = new DockPanel { Margin = new Thickness(0,18,0,0), LastChildFill=true }; DockPanel.SetDock(bottom, Dock.Bottom); root.Children.Add(bottom);
+            var actions = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment=HorizontalAlignment.Right }; DockPanel.SetDock(actions,Dock.Right); bottom.Children.Add(actions);
+            ToolUi.Button(actions, "关闭", Close);
+            applyButton = ToolUi.Button(actions, "应用更改", ApplyPreview); applyButton.SetResourceReference(Control.BackgroundProperty,"AccentBrush"); applyButton.SetResourceReference(Control.ForegroundProperty,"AccentTextBrush"); applyButton.Padding=new Thickness(20,9,20,9);
+            status = ToolUi.Note("准备预览…"); status.VerticalAlignment=VerticalAlignment.Center; bottom.Children.Add(status);
+            var columns = new Grid(); columns.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(286) }); columns.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(20) }); columns.ColumnDefinitions.Add(new ColumnDefinition()); root.Children.Add(columns);
+            var left = new DockPanel(); var leftActions=new StackPanel { Margin=new Thickness(0,12,0,0) }; DockPanel.SetDock(leftActions,Dock.Bottom); left.Children.Add(leftActions);
+            ToolUi.Button(leftActions,"保存为默认规则",()=>{Commit();status.Text=save();});
+            var inputs = ToolUi.RenameControls(preferences.Rename, true); inputs.Margin = new Thickness(0, 0, 10, 8); if(inputs.Children[0] is TextBlock firstHeading) { firstHeading.Margin=new Thickness(0,0,0,8); firstHeading.FontSize=15; } left.Children.Add(ToolUi.Scroll(inputs)); columns.Children.Add(Card(left));
+            var preview = new DockPanel(); var previewCard=Card(preview); Grid.SetColumn(previewCard, 2); columns.Children.Add(previewCard);
+            var title = new TextBlock { Text="应用前预览",FontSize=15,FontWeight=FontWeights.SemiBold,Margin=new Thickness(0,0,0,6) }; DockPanel.SetDock(title, Dock.Top); preview.Children.Add(title);
+            var note = ToolUi.Note("重名或非法名称会阻止应用；仅修改勾选且符合规则的页面。"); DockPanel.SetDock(note, Dock.Top); preview.Children.Add(note);
+            var selection = new DockPanel { Margin = new Thickness(0, 8, 0, 14) }; DockPanel.SetDock(selection, Dock.Top); preview.Children.Add(selection);
+            var refresh=new StackPanel {Orientation=Orientation.Horizontal}; DockPanel.SetDock(refresh,Dock.Right); selection.Children.Add(refresh); ToolUi.Button(refresh,"刷新页面",RefreshSources);
+            var selectActions=new StackPanel {Orientation=Orientation.Horizontal};selection.Children.Add(selectActions);
+            ToolUi.Button(selectActions, "全选", () => { excluded.Clear(); BuildPreview(); }); ToolUi.Button(selectActions, "全不选", () => { foreach (var source in sources) excluded.Add(RenamePlanner.Key(source)); BuildPreview(); });
+            grid = new DataGrid { AutoGenerateColumns = false, CanUserAddRows = false, CanUserDeleteRows = false, CanUserSortColumns = false, CanUserReorderColumns=false, MinColumnWidth = 90, SelectionMode = DataGridSelectionMode.Single, HeadersVisibility = DataGridHeadersVisibility.Column, GridLinesVisibility = DataGridGridLinesVisibility.Horizontal, RowHeight = 44, ColumnHeaderHeight=40, BorderThickness = new Thickness(0), EnableRowVirtualization = true, CanUserResizeRows=false };
             grid.SetResourceReference(Control.BackgroundProperty, "SurfaceBrush"); grid.SetResourceReference(Control.ForegroundProperty, "TextBrush"); grid.SetResourceReference(DataGrid.HorizontalGridLinesBrushProperty, "BorderBrush");
-            grid.SetResourceReference(DataGrid.RowBackgroundProperty, "SurfaceBrush");
-            var headerStyle = new Style(typeof(DataGridColumnHeader)); headerStyle.Setters.Add(new Setter(Control.BackgroundProperty, FindResource("CanvasBrush"))); headerStyle.Setters.Add(new Setter(Control.ForegroundProperty, FindResource("MutedBrush"))); headerStyle.Setters.Add(new Setter(Control.PaddingProperty, new Thickness(7))); grid.ColumnHeaderStyle = headerStyle;
-            var check = new FrameworkElementFactory(typeof(CheckBox)); check.SetValue(FrameworkElement.HorizontalAlignmentProperty, HorizontalAlignment.Center); check.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center); check.SetBinding(ToggleButton.IsCheckedProperty, new Binding("Selected") { Mode = BindingMode.TwoWay, UpdateSourceTrigger = UpdateSourceTrigger.PropertyChanged });
-            grid.Columns.Add(new DataGridTemplateColumn { Header = "选", Width = 34, MinWidth = 34, CellTemplate = new DataTemplate { VisualTree = check } });
+            grid.SetResourceReference(DataGrid.RowBackgroundProperty, "SurfaceBrush"); grid.SetResourceReference(DataGrid.AlternatingRowBackgroundProperty,"CanvasBrush");
+            var cellStyle=new Style(typeof(DataGridCell)); cellStyle.Setters.Add(new Setter(Control.BorderThicknessProperty,new Thickness(0))); cellStyle.Setters.Add(new Setter(Control.PaddingProperty,new Thickness(0))); cellStyle.Setters.Add(new Setter(Control.VerticalContentAlignmentProperty,VerticalAlignment.Center));
+            var selectedTrigger=new Trigger {Property=DataGridCell.IsSelectedProperty,Value=true}; selectedTrigger.Setters.Add(new Setter(Control.BackgroundProperty,FindResource("SelectedBrush"))); selectedTrigger.Setters.Add(new Setter(Control.ForegroundProperty,FindResource("TextBrush"))); cellStyle.Triggers.Add(selectedTrigger); grid.CellStyle=cellStyle;
+            var headerStyle = new Style(typeof(DataGridColumnHeader)); headerStyle.Setters.Add(new Setter(Control.BackgroundProperty, FindResource("CanvasBrush"))); headerStyle.Setters.Add(new Setter(Control.ForegroundProperty, FindResource("MutedBrush"))); headerStyle.Setters.Add(new Setter(Control.PaddingProperty, new Thickness(12,0,12,0))); headerStyle.Setters.Add(new Setter(Control.VerticalContentAlignmentProperty,VerticalAlignment.Center)); headerStyle.Setters.Add(new Setter(Control.BorderThicknessProperty,new Thickness(0))); grid.ColumnHeaderStyle = headerStyle;
+            var check = new FrameworkElementFactory(typeof(CheckBox)); check.SetValue(FrameworkElement.MarginProperty,new Thickness(7,0,0,0)); check.SetValue(FrameworkElement.HorizontalAlignmentProperty, HorizontalAlignment.Center); check.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center); check.SetBinding(ToggleButton.IsCheckedProperty, new Binding("Selected") { Mode = BindingMode.TwoWay, UpdateSourceTrigger = UpdateSourceTrigger.PropertyChanged });
+            grid.Columns.Add(new DataGridTemplateColumn { Header = "", Width = 42, MinWidth = 42, CellTemplate = new DataTemplate { VisualTree = check } });
             grid.Columns.Add(new DataGridTextColumn { Header = "工作簿", Binding = new Binding("Book"), IsReadOnly = true, Width = new DataGridLength(1, DataGridLengthUnitType.Star) });
             grid.Columns.Add(new DataGridTextColumn { Header = "原名称", Binding = new Binding("Before"), IsReadOnly = true, Width = new DataGridLength(1, DataGridLengthUnitType.Star) });
             grid.Columns.Add(new DataGridTextColumn { Header = "新名称", Binding = new Binding("After"), IsReadOnly = true, Width = new DataGridLength(1, DataGridLengthUnitType.Star) });
             grid.Columns.Add(new DataGridTextColumn { Header = "状态", Binding = new Binding("Status"), IsReadOnly = true, Width = new DataGridLength(1, DataGridLengthUnitType.Star) }); preview.Children.Add(grid);
-            grid.SizeChanged += (s,e) => { foreach (var column in grid.Columns.Skip(1)) column.Width = new DataGridLength(Math.Max(110, (e.NewSize.Width - 48) / 4)); };
+            foreach(var column in grid.Columns.OfType<DataGridTextColumn>())
+            {
+                var textStyle=new Style(typeof(TextBlock)); textStyle.Setters.Add(new Setter(FrameworkElement.VerticalAlignmentProperty,VerticalAlignment.Center)); textStyle.Setters.Add(new Setter(FrameworkElement.MarginProperty,new Thickness(12,0,12,0))); textStyle.Setters.Add(new Setter(TextBlock.TextTrimmingProperty,TextTrimming.CharacterEllipsis)); textStyle.Setters.Add(new Setter(FrameworkElement.ToolTipProperty,new Binding(((Binding)column.Binding).Path.Path)));
+                if(column.Header.ToString()=="新名称") {textStyle.Setters.Add(new Setter(TextBlock.FontWeightProperty,FontWeights.SemiBold));textStyle.Setters.Add(new Setter(TextBlock.ForegroundProperty,FindResource("AccentBrush")));}
+                column.ElementStyle=textStyle;
+            }
+            grid.SizeChanged += (s,e) => { double available=Math.Max(360,e.NewSize.Width-72); for(int i=1;i<grid.Columns.Count;i++) grid.Columns[i].Width=new DataGridLength(Math.Max(90,available*(i==4?.18:i==1?.26:.28))); };
             timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(180) }; timer.Tick += (s,e) => { timer.Stop(); if (capturedScope != preferences.Rename.AllWorkbooks) RefreshSources(); else BuildPreview(); };
             inputs.AddHandler(TextBox.TextChangedEvent, new TextChangedEventHandler((s,e) => Schedule())); inputs.AddHandler(ToggleButton.CheckedEvent, new RoutedEventHandler((s,e) => Schedule())); inputs.AddHandler(ToggleButton.UncheckedEvent, new RoutedEventHandler((s,e) => Schedule()));
             inputs.AddHandler(Selector.SelectionChangedEvent, new SelectionChangedEventHandler((s,e) => Schedule())); inputs.AddHandler(RangeBase.ValueChangedEvent, new RoutedPropertyChangedEventHandler<double>((s,e) => Schedule())); inputs.LostKeyboardFocus += (s,e) => Schedule();
             Loaded += (s,e) => RefreshSources(); Closed += (s,e) => timer.Stop();
+        }
+        private Border Card(UIElement child)
+        {
+            var card=new Border {Child=child,Padding=new Thickness(16),CornerRadius=new CornerRadius(10),BorderThickness=new Thickness(1)};
+            card.SetResourceReference(Border.BackgroundProperty,"SurfaceBrush");card.SetResourceReference(Border.BorderBrushProperty,"BorderBrush");return card;
         }
         private void Schedule() { if (rebuilding || !IsLoaded) return; applyButton.IsEnabled = false; timer.Stop(); timer.Start(); }
         private void Commit() { grid.CommitEdit(); Keyboard.ClearFocus(); preferences.Normalize(); }

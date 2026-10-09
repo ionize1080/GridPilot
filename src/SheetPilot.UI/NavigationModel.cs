@@ -74,8 +74,18 @@ namespace SheetPilot.UI
         public void Update(WorkbookSnapshot value)
         {
             if (disposed || snapshot.SameContent(value)) return;
+            bool activityOnly = !searchPending && snapshot.Sheets.Count == value.Sheets.Count &&
+                snapshot.Sheets.Zip(value.Sheets, (a,b) => a.Key == b.Key && a.WorkbookKey == b.WorkbookKey && a.Name == b.Name &&
+                    a.WorkbookName == b.WorkbookName && a.Index == b.Index && a.Visibility == b.Visibility && a.Kind == b.Kind).All(equal => equal);
             snapshot = value;
             Notify(nameof(WorkbookName));
+            if (activityOnly)
+            {
+                var lookup = value.Sheets.ToDictionary(s => RenamePlanner.Key(s));
+                Results = Results.Select(s => lookup[RenamePlanner.Key(s)]).ToArray();
+                Selected = Results.FirstOrDefault(s => s.IsActive);
+                return;
+            }
             ScheduleSearch();
         }
         public void Report(string value) { Message = value; Notify(nameof(EmptyTitle)); }
@@ -120,7 +130,7 @@ namespace SheetPilot.UI
                 searchPending = false;
                 var old = Selected;
                 Results = output.Items;
-                Selected = Results.FirstOrDefault(x => old != null && x.Key == old.Key && x.WorkbookKey == old.WorkbookKey) ?? Results.FirstOrDefault(x => x.IsActive) ?? Results.FirstOrDefault();
+                Selected = Results.FirstOrDefault(x => x.IsActive) ?? Results.FirstOrDefault(x => old != null && x.Key == old.Key && x.WorkbookKey == old.WorkbookKey) ?? Results.FirstOrDefault();
                 Message = output.Error ?? "";
                 Status = Results.Count + " / " + input.Sheets.Count + " 个页面";
                 Notify(nameof(IsEmpty)); Notify(nameof(EmptyTitle)); Notify(nameof(EmptyHint));

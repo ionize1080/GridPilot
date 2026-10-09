@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Input;
+using System.Windows.Controls.Primitives;
 using SheetPilot.Core;
 
 namespace SheetPilot.UI
@@ -18,10 +19,19 @@ namespace SheetPilot.UI
         {
             Margin = new Thickness(0, 7, 0, 0);
             var row = new DockPanel(); DockPanel.SetDock(input, Dock.Right); row.Children.Add(input);
-            var swatch = new Border { Width = 20, Height = 20, CornerRadius = new CornerRadius(5), BorderThickness = new Thickness(1), Margin = new Thickness(6, 0, 8, 0) };
+            var swatch = new Border { Width = 24, Height = 20, CornerRadius = new CornerRadius(4), BorderThickness = new Thickness(1) };
             swatch.SetResourceReference(Border.BorderBrushProperty, "BorderBrush");
             swatch.SetBinding(Border.BackgroundProperty, new Binding(nameof(Value)) { Source = this });
-            DockPanel.SetDock(swatch, Dock.Right); row.Children.Add(swatch); row.Children.Add(label); Children.Add(row); Children.Add(error);
+            var picker = new Button { Content=swatch, Padding=new Thickness(4), Margin=new Thickness(6,0,8,0), ToolTip="打开色盘" };
+            System.Windows.Automation.AutomationProperties.SetName(picker,"打开色盘");
+            var palette = new ColorPalette(); palette.SetBinding(ColorPalette.ValueProperty,new Binding(nameof(Value)) { Source=this,Mode=BindingMode.TwoWay });
+            var surface = new Border { Child=palette,Padding=new Thickness(16),CornerRadius=new CornerRadius(10),BorderThickness=new Thickness(1) };
+            surface.SetResourceReference(Border.BackgroundProperty,"SurfaceBrush"); surface.SetResourceReference(Border.BorderBrushProperty,"BorderBrush");
+            var popup = new Popup { Child=surface,PlacementTarget=picker,Placement=PlacementMode.Bottom,AllowsTransparency=true,StaysOpen=false };
+            picker.Click += (s,e) => popup.IsOpen=!popup.IsOpen;
+            popup.PreviewKeyDown += (s,e) => { if(e.Key==Key.Escape) { popup.IsOpen=false; e.Handled=true; } };
+            Unloaded += (s,e) => popup.IsOpen=false;
+            DockPanel.SetDock(picker, Dock.Right); row.Children.Add(picker); row.Children.Add(label); Children.Add(row); Children.Add(error); Children.Add(popup);
             error.SetResourceReference(TextBlock.ForegroundProperty, "TextBrush");
             input.LostKeyboardFocus += (s,e) => CommitInput();
             input.PreviewKeyDown += (s,e) => { if (e.Key == Key.Enter) { CommitInput(); e.Handled = true; } else if (e.Key == Key.Escape) { Restore(); e.Handled = true; } };

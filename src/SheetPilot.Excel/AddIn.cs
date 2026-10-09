@@ -48,6 +48,7 @@ namespace SheetPilot.Excel
         [ExcelCommand(Name = "GridPilot_Number")] public static void Number() => Guard(() => Tools?.Execute("GridPilot_Number"));
         [ExcelCommand(Name = "GridPilot_Undo")] public static void Undo() => Guard(() => Tools?.Execute("GridPilot_Undo"));
         [ExcelCommand(Name = "GridPilot_Settings")] public static void Settings() => Guard(() => Tools?.Execute("GridPilot_Settings"));
+        [ExcelCommand(Name = "GridPilot_Diagnostics")] public static void Diagnostics() => Log.Write(Tools?.PerformanceSummary ?? "Tools unavailable");
         internal static void Guard(Action action)
         {
             try { action(); }

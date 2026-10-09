@@ -33,6 +33,7 @@ namespace SheetPilot.Excel
         public string Label => "常用工具";
         public bool FocusEnabled => focus.Enabled;
         public bool CanUndo => gateway.CanUndo;
+        internal string PerformanceSummary => focus.PerformanceSummary;
         public IEnumerable<FeatureCommand> Commands => new[] {
             new FeatureCommand("GridPilot_Rename", "批量重命名", "选择范围、查找替换与编号；检查预览后应用。", "", () => Run(OpenRename)),
             new FeatureCommand("GridPilot_Focus", "聚焦", "临时高亮活动单元格所在行列；再次点击关闭，不修改单元格格式。", "", () => { focus.Toggle(); Announce(focus.Enabled ? "聚焦已开启，在普通工作表视图中跟随活动单元格。" : "聚焦已关闭。"); Ribbon.Refresh(); }),
