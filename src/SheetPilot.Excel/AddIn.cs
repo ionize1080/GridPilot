@@ -25,7 +25,16 @@ namespace SheetPilot.Excel
             if (Features == null) return;
             try { Features?.Dispose(); }
             catch (Exception ex) { Log.Error("Unload", ex); }
-            finally { Features = null; Navigation = null; Log.Write("Unloaded"); }
+            finally
+            {
+                Features = null; Navigation = null; Log.Write("Unloaded");
+                // Unreachable Office RCWs can otherwise survive in an idle automation host.
+                // Do not block the Excel STA: COM finalizers may need to marshal back to it.
+                System.Threading.ThreadPool.QueueUserWorkItem(_ =>
+                {
+                    GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
+                });
+            }
         }
         [ExcelCommand(Name = "SheetPilot_ShowNavigation", Description = "显示 SheetPilot 工作表导航")]
         public static void ShowNavigation() => Guard(() => Navigation?.Show());

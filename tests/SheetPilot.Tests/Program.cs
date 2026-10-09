@@ -24,13 +24,14 @@ internal static class Program
         {
             SearchTests();
             SettingsTests();
+            PreferenceTests();
             UiTests(args.Length > 1 && args[0] == "--render" ? args[1] : null);
             if (args.Length > 1 && args[0] == "--excel")
             {
                 int processId = ExcelTests(Path.GetFullPath(args[1]));
                 // COM finalizers may marshal to this STA; keep it pumping instead of blocking it.
                 for (int i = 0; i < 2; i++) { GC.Collect(); var finalizers = Task.Run(() => GC.WaitForPendingFinalizers()); PumpUntil(() => finalizers.IsCompleted, 10000); }
-                try { using (var process = Process.GetProcessById(processId)) Check(process.WaitForExit(15000), "XLL: owned Excel instance exits after Quit"); }
+                try { using (var process = Process.GetProcessById(processId)) { PumpUntil(() => process.HasExited, 15000); Check(true, "XLL: owned Excel instance exits after Quit"); } }
                 catch (ArgumentException) { Check(true, "XLL: owned Excel instance already exited"); }
             }
             Console.WriteLine("PASS " + checks + " assertions");
@@ -140,6 +141,63 @@ internal static class Program
             Thread.Sleep(10);
         }
     }
+    private static void PreferenceTests()
+    {
+        Check(!PreferenceInput.TryInteger("", 28, 80, out _) && !PreferenceInput.TryInteger("3.5", 28, 80, out _), "input: incomplete and fractional numbers rejected");
+        Check(PreferenceInput.TryInteger("999", 28, 80, out int clamped) && clamped == 80, "input: typed number constrained to supported range");
+        Check(PreferenceInput.TryColor(" #abc ", out string color) && color == "#AABBCC", "input: shorthand hex normalized");
+        Check(!PreferenceInput.TryColor("#GG1111", out _) && !PreferenceInput.TryColor("", out _), "input: invalid colors rejected");
+        var settings = new NavigationSettings();
+        var guard = new NativeLayoutGuard(); int writes = 0;
+        settings.PropertyChanged += (s,e) => { if (e.PropertyName == nameof(settings.PaneWidth) && !guard.IsObserving) writes++; };
+        guard.Observe(() => { settings.PaneWidth = 490; guard.Observe(() => settings.PaneWidth = 500); });
+        Check(settings.PaneWidth == 500 && writes == 0, "resize: native observations persist without geometry feedback");
+        settings.PaneWidth = 510; Check(writes == 1, "resize: explicit setting still requests geometry change");
+        try { guard.Observe(() => throw new InvalidOperationException()); } catch (InvalidOperationException) { }
+        Check(!guard.IsObserving, "resize: origin guard resets after failure");
+        using (var model = new NavigationModel(settings))
+        {
+            int layoutNotifications = 0;
+            model.PropertyChanged += (s,e) => { if (e.PropertyName == "EffectiveRowHeight" || e.PropertyName == "RowMargin" || e.PropertyName == "ShowWorkbookNames") layoutNotifications++; };
+            settings.PaneWidth = 520;
+            Check(layoutNotifications == 0, "resize: width does not invalidate result row layout");
+            settings.RowHeight = 44; Check(layoutNotifications == 1, "resize: genuine row height change still invalidates layout");
+            using (var view = new NavigationView(model))
+            {
+                var number = (NumberEditor)view.FindName("RowHeightEditor");
+                // These editors are live bound controls, not parsing-only mocks.
+                view.Measure(new Size(340, 900)); view.Arrange(new Rect(0, 0, 340, 900)); view.UpdateLayout();
+                var box = ((System.Windows.Controls.DockPanel)number.Children[0]).Children.OfType<System.Windows.Controls.TextBox>().Single();
+                box.Text = ""; Check(settings.RowHeight == 44, "input: clearing draft does not mutate setting");
+                box.Text = "57"; Check(number.CommitInput() && settings.RowHeight == 57, "input: commit reaches two-way setting binding");
+                box.Text = "x"; Check(!number.CommitInput() && settings.RowHeight == 57, "input: invalid draft preserves previous setting");
+                ((System.Windows.Controls.Slider)number.Children[1]).Value = 60;
+                Check(settings.RowHeight == 60 && box.Text == "60", "input: slider and typed value stay synchronized");
+                var editor = new ColorEditor(); editor.SetBinding(ColorEditor.ValueProperty, new System.Windows.Data.Binding("AccentColor") { Source = settings, Mode = System.Windows.Data.BindingMode.TwoWay });
+                var colorBox = ((System.Windows.Controls.DockPanel)editor.Children[0]).Children.OfType<System.Windows.Controls.TextBox>().Single();
+                colorBox.Text = "a3c"; Check(editor.CommitInput() && settings.AccentColor == "#AA33CC", "color: editor normalizes and saves custom color");
+                colorBox.Text = "bad-value"; Check(!editor.CommitInput() && settings.AccentColor == "#AA33CC", "color: invalid draft preserves palette");
+                settings.ApplyPalette("dark");
+                Check(((SolidColorBrush)view.Resources["CanvasBrush"]).Color == (Color)ColorConverter.ConvertFromString("#20262C"), "color: live palette updates view resources");
+                settings.ShowTooltips = false;
+                Check(!System.Windows.Controls.ToolTipService.GetIsEnabled((DependencyObject)view.FindName("ClearButton")), "tooltip: preference disables button hints");
+                settings.ShowTooltips = true;
+                Check(System.Windows.Controls.ToolTipService.GetIsEnabled((DependencyObject)view.FindName("ClearButton")), "tooltip: preference restores button hints");
+            }
+        }
+        var path = Path.Combine(Path.GetTempPath(), "SheetPilot-colors-" + Guid.NewGuid().ToString("N") + ".json");
+        try
+        {
+            settings.ShowTooltips = false; settings.BackgroundColor = "#123456"; settings.TextColor = "#ABCDEF"; settings.PaneWidth = 1200;
+            Check(new SettingsStore(path).Save(settings), "color: save custom palette");
+            var restored = new SettingsStore(path).Load();
+            Check(!restored.ShowTooltips && restored.BackgroundColor == "#123456" && restored.TextColor == "#ABCDEF" && restored.PaneWidth == 1200, "color: hints and palette survive restart");
+            File.WriteAllText(path, "{\"SchemaVersion\":1,\"BackgroundColor\":\"invalid\"}");
+            restored = new SettingsStore(path).Load();
+            Check(restored.BackgroundColor == "#F7F9F7" && restored.ShowTooltips, "color: old or malformed fields receive safe defaults");
+        }
+        finally { File.Delete(path); }
+    }
     private static void UiTests(string directory)
     {
         using (var model = new NavigationModel())
@@ -178,7 +236,16 @@ internal static class Program
                 model.Settings.Reset();
                 model.IsSettingsOpen = true;
                 Render(view, Path.Combine(directory, "navigation-settings.png"), 340, 1000, 96);
+                model.Settings.ApplyPalette("dark");
+                Render(view, Path.Combine(directory, "navigation-settings-dark.png"), 340, 1100, 96);
+                var settingsScroll = (System.Windows.Controls.ScrollViewer)view.FindName("SettingsScroll");
+                settingsScroll.ScrollToEnd(); view.UpdateLayout();
+                Render(view, Path.Combine(directory, "navigation-colors.png"), 340, 900, 96);
                 model.IsSettingsOpen = false;
+                Render(view, Path.Combine(directory, "navigation-dark.png"), 340, 820, 96);
+                model.Settings.ApplyPalette("neutral");
+                Render(view, Path.Combine(directory, "navigation-neutral.png"), 340, 820, 96);
+                model.Settings.Reset();
                 model.Update(new WorkbookSnapshot("demo", "2026 年度经营分析.xlsx", rows)); PumpUntil(() => model.Results.Count == 7);
             }
             model.Query = "销售";
@@ -219,6 +286,7 @@ internal static class Program
     private static int ExcelTests(string addIn)
     {
         dynamic app = null;
+        var owned = new System.Collections.Generic.List<object>();
         int processId = 0;
         try
         {
@@ -229,10 +297,15 @@ internal static class Program
             Console.WriteLine("Excel version: " + app.Version + "; OS: " + Environment.OSVersion);
             var gateway = new ExcelGateway(() => (object)app);
             dynamic first = app.Workbooks.Add(-4167);
+            owned.Add((object)first);
             dynamic overview = first.Sheets.Item[1]; overview.Name = "总览";
+            owned.Add((object)overview);
             dynamic hidden = first.Worksheets.Add(); hidden.Name = "隐藏数据"; hidden.Visible = 0;
+            owned.Add((object)hidden);
             dynamic secret = first.Worksheets.Add(); secret.Name = "配置"; secret.Visible = 2;
+            owned.Add((object)secret);
             dynamic chart = first.Charts.Add(); chart.Name = "趋势图";
+            owned.Add((object)chart);
             overview.Activate();
             var snapshot = gateway.Capture();
             Check(snapshot.Sheets.Count == 4, "COM: includes all Sheets, not only Worksheets");
@@ -248,8 +321,13 @@ internal static class Program
             try { var h = snapshot.Sheets.Single(s => s.Name == "隐藏数据"); gateway.Navigate(h.WorkbookKey, h); Check(false, "hidden"); }
             catch (InvalidOperationException) { Check(true, "COM: hidden visibility rechecked"); }
             dynamic second = app.Workbooks.Add(-4167); second.Sheets.Item[1].Name = "新总览";
+            owned.Add((object)second);
             Check(gateway.Capture().Sheets.Count == 1, "COM: current workbook scope");
-            Check(gateway.Capture(true).Sheets.Count == 5, "COM: all workbooks scope");
+            var allBooks = gateway.Capture(true);
+            Check(allBooks.Sheets.Count == 5, "COM: all workbooks scope");
+            // Excel can initialize a formerly empty CodeName when creating another workbook.
+            // Cross-book navigation uses the refreshed all-workbooks directory, as the UI does.
+            overviewItem = allBooks.Sheets.Single(s => s.WorkbookKey == overviewItem.WorkbookKey && s.Name == "新总览");
             gateway.Navigate(overviewItem.WorkbookKey, overviewItem);
             Check((string)app.ActiveWorkbook.Name == (string)first.Name, "COM: duplicate names navigate to correct workbook");
             chart.Delete();
@@ -271,6 +349,9 @@ internal static class Program
         }
         finally
         {
+            // Only this isolated test owns these RCWs. Never do this in the production gateway.
+            foreach (var item in owned.AsEnumerable().Reverse()) if (Marshal.IsComObject(item)) Marshal.FinalReleaseComObject(item);
+            owned.Clear();
             if (app != null) { app.Quit(); Marshal.FinalReleaseComObject((object)app); app = null; }
         }
         return processId;

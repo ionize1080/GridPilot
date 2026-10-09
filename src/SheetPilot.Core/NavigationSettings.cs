@@ -22,7 +22,25 @@ namespace SheetPilot.Core
         private int workbookNameMode = 0;
         [DataMember] public int WorkbookNameMode { get => workbookNameMode; set => Set(ref workbookNameMode, Range(value, 0, 2)); }
         private int paneWidth = 320;
-        [DataMember] public int PaneWidth { get => paneWidth; set => Set(ref paneWidth, Range(value, 260, 600)); }
+        [DataMember] public int PaneWidth { get => paneWidth; set => Set(ref paneWidth, Range(value, 260, 1600)); }
+        private bool showTooltips = true;
+        [DataMember] public bool ShowTooltips { get => showTooltips; set => Set(ref showTooltips, value); }
+        private string backgroundColor = "#F7F9F7";
+        [DataMember] public string BackgroundColor { get => backgroundColor; set { if (PreferenceInput.TryColor(value, out var color)) Set(ref backgroundColor, color); } }
+        private string surfaceColor = "#FFFFFF";
+        [DataMember] public string SurfaceColor { get => surfaceColor; set { if (PreferenceInput.TryColor(value, out var color)) Set(ref surfaceColor, color); } }
+        private string textColor = "#294737";
+        [DataMember] public string TextColor { get => textColor; set { if (PreferenceInput.TryColor(value, out var color)) Set(ref textColor, color); } }
+        private string mutedTextColor = "#7C9582";
+        [DataMember] public string MutedTextColor { get => mutedTextColor; set { if (PreferenceInput.TryColor(value, out var color)) Set(ref mutedTextColor, color); } }
+        private string accentColor = "#23825A";
+        [DataMember] public string AccentColor { get => accentColor; set { if (PreferenceInput.TryColor(value, out var color)) Set(ref accentColor, color); } }
+        public void ApplyPalette(string palette)
+        {
+            if (palette == "dark") { BackgroundColor = "#20262C"; SurfaceColor = "#2B333C"; TextColor = "#ECF0F3"; MutedTextColor = "#A3B2BE"; AccentColor = "#67CBA7"; }
+            else if (palette == "neutral") { BackgroundColor = "#F5F6F8"; SurfaceColor = "#FFFFFF"; TextColor = "#293442"; MutedTextColor = "#758092"; AccentColor = "#537BC8"; }
+            else { BackgroundColor = "#F7F9F7"; SurfaceColor = "#FFFFFF"; TextColor = "#294737"; MutedTextColor = "#7C9582"; AccentColor = "#23825A"; }
+        }
         private bool showSheetNumbers = true;
         [DataMember] public bool ShowSheetNumbers { get => showSheetNumbers; set => Set(ref showSheetNumbers, value); }
         private bool showSheetType = false;
@@ -55,6 +73,8 @@ namespace SheetPilot.Core
             FontSize = 13;
             WorkbookNameMode = 0;
             PaneWidth = 320;
+            ShowTooltips = true;
+            ApplyPalette("green");
             ShowSheetNumbers = true;
             ShowSheetType = false;
             ShowHeader = false;

@@ -5,9 +5,24 @@ using SheetPilot.Core;
 
 namespace SheetPilot.UI
 {
-    public partial class NavigationView : UserControl
+    public partial class NavigationView : UserControl, System.IDisposable
     {
-        public NavigationView(NavigationModel model) { InitializeComponent(); DataContext = model; }
+        public NavigationView(NavigationModel model)
+        {
+            InitializeComponent(); DataContext = model; ViewTheme.Apply(Resources, model.Settings);
+            model.Settings.PropertyChanged += SettingsChanged;
+        }
+        private void SettingsChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName.EndsWith("Color", System.StringComparison.Ordinal)) ViewTheme.Apply(Resources, Model.Settings);
+        }
+        public void Dispose()
+        {
+            Model.Settings.PropertyChanged -= SettingsChanged;
+            if (IsKeyboardFocusWithin) Keyboard.ClearFocus();
+        }
+        private void PaletteClick(object sender, RoutedEventArgs e) => Model.Settings.ApplyPalette((string)((Button)sender).Tag);
+        private void OnToolTipOpening(object sender, ToolTipEventArgs e) { if (!Model.Settings.ShowTooltips) e.Handled = true; }
         private NavigationModel Model => (NavigationModel)DataContext;
         public void FocusSearch() { SearchBox.Focus(); SearchBox.SelectAll(); }
         private void RefreshClick(object sender, RoutedEventArgs e) => Model.Refresh();
@@ -24,7 +39,7 @@ namespace SheetPilot.UI
         {
             if (Model.IsSettingsOpen)
             {
-                if (e.Key == Key.Escape) { Model.IsSettingsOpen = false; FocusSearch(); e.Handled = true; }
+                if (e.Key == Key.Escape && !(Keyboard.FocusedElement is TextBox)) { Model.IsSettingsOpen = false; FocusSearch(); e.Handled = true; }
                 return;
             }
             if (e.Key == Key.F && (Keyboard.Modifiers & ModifierKeys.Control) != 0) { FocusSearch(); e.Handled = true; }

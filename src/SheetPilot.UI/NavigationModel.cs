@@ -54,8 +54,11 @@ namespace SheetPilot.UI
         private void SettingsChanged(object sender, PropertyChangedEventArgs e)
         {
             if (disposed) return;
-            Notify(e.PropertyName);
-            Notify(nameof(ShowWorkbookNames)); Notify(nameof(EffectiveRowHeight)); Notify(nameof(RowMargin));
+            if (e.PropertyName == nameof(Settings.WorkbookNameMode) || e.PropertyName == nameof(Settings.ScopeIndex))
+            { Notify(nameof(ShowWorkbookNames)); Notify(nameof(EffectiveRowHeight)); }
+            else if (e.PropertyName == nameof(Settings.RowHeight) || e.PropertyName == nameof(Settings.FontSize)) Notify(nameof(EffectiveRowHeight));
+            else if (e.PropertyName == nameof(Settings.RowGap)) Notify(nameof(RowMargin));
+            if (e.PropertyName == nameof(Settings.ScopeIndex) || e.PropertyName == nameof(Settings.UseRegex) || e.PropertyName == nameof(Settings.MatchCase) || e.PropertyName == nameof(Settings.IncludeHidden)) Notify(e.PropertyName);
             if (e.PropertyName == nameof(Settings.ScopeIndex)) { ClearForScope(); ScopeChanged?.Invoke(ScopeIndex == 1); }
             else if (e.PropertyName == nameof(Settings.UseRegex) || e.PropertyName == nameof(Settings.MatchCase) || e.PropertyName == nameof(Settings.IncludeHidden)) ScheduleSearch();
         }

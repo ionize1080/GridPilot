@@ -120,3 +120,21 @@ Excel 2010 为 MDI：使用应用窗口句柄对应的单个面板；2013+ 为 S
 • Ribbon 的外观由 Excel 决定，不能在 Excel 2010 中整体替换成现代 Office Ribbon。
 • 便携 XLL 仍服从 Office 信任策略和用户权限；运行时有临时 HKCU COM 注册。
 • 无热更新服务、网络请求、数据上传或遥测。
+
+7. v0.3 可复用偏好控件与布局更新
+
+NumberEditor 统一滑块与数字草稿输入，ColorEditor 统一颜色预览、输入验证和提交。
+设置对象只保存已验证值；Enter/失焦提交，Esc 撤销草稿，错误草稿不写入 JSON。
+ViewTheme 将五个持久颜色转换为冻结 WPF Brush 与派生状态色；动态资源更新无需替换列表。
+ShowTooltips 通过附加属性控制每个提示来源，并在视图路由事件处做统一检查。
+新增字段保持 SchemaVersion=1，对 v0.2 配置缺省初始化；不修改旧有字段含义。
+
+原生拖动与应用设置是两条路径：SizeChanged 仅重置250ms观察计时器；稳定后记录宽度，
+NativeLayoutGuard 标记来源，避免 PropertyChanged 再调用 Pane.Width/DockPosition。
+设置页修改位置/宽度才产生布局请求，75ms合并应用；拖动期间暂停快照刷新。
+NavigationModel 按属性精确通知，不因宽度变化重置每条结果的行高/间距/副标题。
+WinForms 承载层启用双缓冲并跟随背景色，保留 Office 原生窗口管理。
+
+卸载时显式解绑 CTP 事件、清除本视图键盘焦点并释放承载层。
+不可达的 Office RCW 在后台触发回收，避免退出后因空闲不触发GC而延迟释放。
+不在 Excel STA 等待终结器，不强制释放生产环境共享 RCW，不退出共享 WPF Dispatcher。

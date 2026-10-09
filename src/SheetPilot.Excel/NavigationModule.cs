@@ -19,7 +19,16 @@ namespace SheetPilot.Excel
     public sealed class NavigationPane : UserControl
     {
         private ElementHost host;
-        public NavigationPane() { AutoScaleMode = AutoScaleMode.Dpi; }
+        public NavigationPane()
+        {
+            AutoScaleMode = AutoScaleMode.Dpi;
+            SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
+        }
+        internal void SetBackground(string color)
+        {
+            BackColor = System.Drawing.ColorTranslator.FromHtml(color);
+            if (host != null) host.BackColor = BackColor;
+        }
         internal void Attach(NavigationView view)
         {
             host = new ElementHost { Dock = DockStyle.Fill, Child = view };
@@ -40,6 +49,7 @@ namespace SheetPilot.Excel
         private readonly Timer saveTimer;
         private readonly SettingsStore store;
         private readonly NavigationSettings settings;
+        private readonly NativeLayoutGuard nativeLayout = new NativeLayoutGuard();
         private bool settingsDirty;
         private bool queued, disposed;
         public NavigationModule(IWorkbookGateway gateway)
@@ -61,10 +71,18 @@ namespace SheetPilot.Excel
             foreach (var session in sessions.Values)
             {
                 session.Model.SettingsStatus = "正在保存…";
-                if (e.PropertyName == nameof(settings.DockSide) || e.PropertyName == nameof(settings.PaneWidth)) session.ApplyLayout();
+                if (!nativeLayout.IsObserving)
+                {
+                    if (e.PropertyName == nameof(settings.DockSide)) session.RequestLayout(true, false);
+                    else if (e.PropertyName == nameof(settings.PaneWidth)) session.RequestLayout(false, true);
+                }
+                if (e.PropertyName == nameof(settings.BackgroundColor)) session.SetBackground();
             }
-            timer.Interval = settings.RefreshSeconds * 1000;
-            if (settings.AutoRefresh && sessions.Count > 0) timer.Start(); else timer.Stop();
+            if (e.PropertyName == nameof(settings.RefreshSeconds) || e.PropertyName == nameof(settings.AutoRefresh))
+            {
+                timer.Interval = settings.RefreshSeconds * 1000;
+                if (settings.AutoRefresh && sessions.Count > 0) timer.Start(); else timer.Stop();
+            }
         }
         private void SaveSettings()
         {
@@ -87,7 +105,7 @@ namespace SheetPilot.Excel
             IntPtr window = ExcelDnaUtil.WindowHandle;
             if (!sessions.TryGetValue(window, out var session))
             {
-                session = new PaneSession(settings, Refresh, Navigate, () => { if (settings.AutoRefresh) timer.Start(); Refresh(); });
+                session = new PaneSession(settings, nativeLayout, Refresh, Navigate, () => { if (settings.AutoRefresh) timer.Start(); Refresh(); });
                 session.Model.SettingsStatus = store.Status;
                 session.Model.SettingsSaveFailed = store.HasError;
                 sessions.Add(window, session);
@@ -112,7 +130,7 @@ namespace SheetPilot.Excel
                     {
                         foreach (var dead in sessions.Keys.Where(h => !IsWindow(h)).ToArray()) { sessions[dead].Dispose(); sessions.Remove(dead); }
                         var current = ExcelDnaUtil.WindowHandle;
-                        if (sessions.TryGetValue(current, out var session) && session.Pane.Visible)
+                        if (sessions.TryGetValue(current, out var session) && session.Pane.Visible && !session.IsResizing)
                             session.Model.Update(gateway.Capture(session.Model.ScopeIndex == 1));
                         if (!sessions.Values.Any(p => p.Pane.Visible)) timer.Stop();
                     }
@@ -140,6 +158,7 @@ namespace SheetPilot.Excel
         public void Dispose()
         {
             if (disposed) return;
+            foreach (var session in sessions.Values) session.FlushWidth();
             disposed = true;
             settings.PropertyChanged -= SettingsChanged;
             SaveSettings();
@@ -159,15 +178,28 @@ namespace SheetPilot.Excel
             public bool Disposed { get; private set; }
             private readonly NavigationPane control;
             private readonly NavigationSettings settings;
+            private readonly NativeLayoutGuard nativeLayout;
+            private readonly Timer resizeTimer = new Timer { Interval = 250 };
+            private readonly Timer layoutTimer = new Timer { Interval = 75 };
+            private bool pendingDock, pendingWidth;
+            private readonly Action becameVisible;
+            public bool IsResizing => resizeTimer.Enabled;
             private bool applyingLayout;
-            public PaneSession(NavigationSettings settings, Action refresh, Action<PaneSession, SheetItem> navigate, Action becameVisible)
+            public PaneSession(NavigationSettings settings, NativeLayoutGuard nativeLayout, Action refresh, Action<PaneSession, SheetItem> navigate, Action becameVisible)
             {
                 this.settings = settings;
+                this.nativeLayout = nativeLayout;
+                this.becameVisible = becameVisible;
+                resizeTimer.Tick += (s,e) => FlushWidth();
+                layoutTimer.Tick += (s,e) => { layoutTimer.Stop(); bool dock = pendingDock, width = pendingWidth; pendingDock = pendingWidth = false; ApplyLayout(dock, width); };
                 Model = new NavigationModel(settings);
                 View = new NavigationView(Model);
                 control = new NavigationPane();
                 control.Attach(View);
-                control.Disposed += (s,e) => Model.Dispose();
+                SetBackground();
+                // Office may dispose its child while already tearing down the COM pane.
+                // Release managed work here; never reenter Pane.Delete from this callback.
+                control.Disposed += (s,e) => { resizeTimer.Stop(); layoutTimer.Stop(); View.Dispose(); Model.Dispose(); };
                 try
                 {
                     // Use Office's docking/parent mechanism; no SetParent, owner hacks, or embedded browser.
@@ -175,24 +207,39 @@ namespace SheetPilot.Excel
                     if (Pane == null) throw new InvalidOperationException("Office 无法创建任务面板，请检查当前用户的加载项权限。");
                     ApplyLayout();
                     Pane.DockPositionStateChange += DockChanged;
-                    Pane.VisibleStateChange += pane => { if (!Disposed && pane.Visible) becameVisible(); };
-                    control.SizeChanged += (s,e) => RememberWidth();
+                    Pane.VisibleStateChange += VisibleChanged;
+                    control.SizeChanged += (s,e) =>
+                    {
+                        if (Disposed || applyingLayout) return;
+                        // While the native splitter owns the interaction, never write geometry back.
+                        layoutTimer.Stop(); pendingDock = pendingWidth = false;
+                        resizeTimer.Stop(); resizeTimer.Start();
+                    };
                     Model.ScopeChanged += all => refresh();
                     Model.RefreshRequested += refresh;
                     Model.NavigateRequested += item => navigate(this, item);
                     Log.Write("Task pane created; dock=" + Pane.DockPosition + "; width=" + Pane.Width);
                 }
-                catch { Model.Dispose(); control.Dispose(); if (Pane != null) { try { Pane.Delete(); } catch { } } throw; }
+                catch { resizeTimer.Dispose(); layoutTimer.Dispose(); View.Dispose(); Model.Dispose(); control.Dispose(); if (Pane != null) { try { Pane.Delete(); } catch { } } throw; }
             }
-            public void ApplyLayout()
+            public void SetBackground() => control.SetBackground(settings.BackgroundColor);
+            private void VisibleChanged(CustomTaskPane pane) { if (!Disposed && pane.Visible) becameVisible(); }
+            public void RequestLayout(bool dock, bool width)
+            {
+                if (Disposed) return;
+                resizeTimer.Stop();
+                pendingDock |= dock; pendingWidth |= width;
+                if (!layoutTimer.Enabled) layoutTimer.Start();
+            }
+            private void ApplyLayout(bool dock = true, bool width = true)
             {
                 if (Disposed || Pane == null || applyingLayout) return;
                 applyingLayout = true;
                 try
                 {
                     var side = settings.DockSide == 1 ? MsoCTPDockPosition.msoCTPDockPositionLeft : MsoCTPDockPosition.msoCTPDockPositionRight;
-                    if (Pane.DockPosition != side) Pane.DockPosition = side;
-                    if (Pane.Width != settings.PaneWidth) Pane.Width = settings.PaneWidth;
+                    if (dock && Pane.DockPosition != side) Pane.DockPosition = side;
+                    if (width && Pane.Width != settings.PaneWidth) Pane.Width = settings.PaneWidth;
                 }
                 catch (Exception ex) { Log.Error("Pane layout", ex); Model.Report("Excel 暂时无法调整停靠位置或宽度，请稍后重试。"); }
                 finally { applyingLayout = false; }
@@ -202,18 +249,23 @@ namespace SheetPilot.Excel
                 if (Disposed || applyingLayout) return;
                 try
                 {
-                    if (pane.DockPosition == MsoCTPDockPosition.msoCTPDockPositionLeft) settings.DockSide = 1;
-                    else if (pane.DockPosition == MsoCTPDockPosition.msoCTPDockPositionRight) settings.DockSide = 0;
+                    nativeLayout.Observe(() =>
+                    {
+                        if (pane.DockPosition == MsoCTPDockPosition.msoCTPDockPositionLeft) settings.DockSide = 1;
+                        else if (pane.DockPosition == MsoCTPDockPosition.msoCTPDockPositionRight) settings.DockSide = 0;
+                    });
                 }
                 catch (Exception ex) { Log.Error("Remember dock", ex); }
             }
-            private void RememberWidth()
+            public void FlushWidth()
             {
+                if (!resizeTimer.Enabled) return;
+                resizeTimer.Stop();
                 if (Disposed || applyingLayout || Pane == null) return;
                 try
                 {
                     if (Pane.DockPosition == MsoCTPDockPosition.msoCTPDockPositionLeft || Pane.DockPosition == MsoCTPDockPosition.msoCTPDockPositionRight)
-                        settings.PaneWidth = Pane.Width;
+                        nativeLayout.Observe(() => settings.PaneWidth = Pane.Width);
                 }
                 catch (Exception ex) { Log.Error("Remember width", ex); }
             }
@@ -221,8 +273,13 @@ namespace SheetPilot.Excel
             {
                 if (Disposed) return;
                 Disposed = true;
+                resizeTimer.Dispose(); layoutTimer.Dispose();
+                View.Dispose();
                 Model.Dispose();
+                try { if (Pane != null) { Pane.DockPositionStateChange -= DockChanged; Pane.VisibleStateChange -= VisibleChanged; } }
+                catch (Exception ex) { Log.Error("Detach pane events", ex); }
                 try { Pane?.Delete(); } catch (Exception ex) { Log.Error("Delete pane", ex); }
+                Pane = null;
                 control.Dispose();
             }
         }
