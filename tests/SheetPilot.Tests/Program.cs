@@ -23,6 +23,7 @@ internal static partial class Program
         try
         {
             if(args.Length>2 && args[0]=="--interactive") { InteractiveTests(Path.GetFullPath(args[1]),Path.GetFullPath(args[2])); return 0; }
+            if (args.Length > 0 && args[0] == "--color-picker-host") { ColorPickerHostTests(); return 0; }
             SearchTests();
             SettingsTests();
             PreferenceTests();
