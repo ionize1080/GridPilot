@@ -8,3 +8,5 @@ SheetPilot.settings.json*
 
 GridPilot.navigation.json*
 GridPilot.tools.json*
+.temp/
+release-v*/

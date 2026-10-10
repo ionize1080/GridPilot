@@ -38,6 +38,7 @@ namespace SheetPilot.Core
     {
         [DataMember] public int SchemaVersion { get; set; } = 1;
         [DataMember] public RenameOptions Rename { get; set; } = new RenameOptions();
+        [DataMember] public CopyOptions Copy { get; set; } = new CopyOptions();
         [DataMember] public string FocusColor { get; set; } = "#42AD91";
         [DataMember] public int FocusOpacity { get; set; } = 20;
         [DataMember] public bool FocusRow { get; set; } = true;
@@ -58,6 +59,8 @@ namespace SheetPilot.Core
         { SchemaVersion = 1; Rename = new RenameOptions(); FocusColor = "#42AD91"; FocusOpacity = 20; FocusInterval = 33; PreserveVisualAlignment = FocusRow = FocusColumn = ClearActiveCell = PreserveLeadingZeros = ProtectPrecision = TrimNumericText = AllowThousands = NumberAsTextHint = true; ConversionLimit = 50000; }
         public void Normalize()
         {
+            if (Copy == null) Copy = new CopyOptions();
+            Copy.Normalize();
             if (Rename == null) Rename = new RenameOptions();
             FocusColor = PreferenceInput.TryColor(FocusColor, out var color) ? color : "#42AD91";
             FocusOpacity = Math.Max(5, Math.Min(60, FocusOpacity)); FocusInterval = Math.Max(16, Math.Min(100, FocusInterval));

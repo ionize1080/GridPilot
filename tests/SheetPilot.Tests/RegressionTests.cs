@@ -26,7 +26,7 @@ internal static partial class Program
         var prefs=new PreferencesWindow(new ToolPreferences(),new NavigationSettings(),()=>"Saved",()=>{});
         var content=(System.Windows.FrameworkElement)prefs.Content;
         content.Measure(new System.Windows.Size(940,740));content.Arrange(new System.Windows.Rect(0,0,940,740));content.UpdateLayout();
-        foreach(var id in new[]{"focus","conversion","rename","about","navigation","general"})
+        foreach(var id in new[]{"focus","conversion","copy","rename","about","navigation","general"})
         {
             ((System.Windows.Controls.Primitives.ToggleButton)prefs.FindName("Category_"+id)).RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
             content.UpdateLayout();

@@ -54,6 +54,11 @@ internal static partial class Program
         RenderWindowContent(settings, Path.Combine(directory,"tools-settings.png"), 940, 740, 96);
         settings.NavigateToSection("focus");
         RenderWindowContent(settings, Path.Combine(directory,"tools-settings-focus.png"), 940, 740, 96);
+        settings.NavigateToSection("copy");
+        RenderWindowContent(settings, Path.Combine(directory,"tools-settings-copy.png"), 940, 740, 96);
+        RenderWindowContent(settings, Path.Combine(directory,"tools-settings-copy-144dpi.png"), 940, 740, 144);
+        colors.ApplyPalette("dark"); settings.NavigateToSection("copy");
+        RenderWindowContent(settings, Path.Combine(directory,"tools-settings-copy-dark.png"), 780, 640, 96);
         colors.ApplyPalette("dark"); settings.NavigateToSection("general");
         RenderWindowContent(settings, Path.Combine(directory,"tools-settings-dark.png"), 780, 640, 96); settings.Close(); colors.ApplyPalette("green");
         var paletteWindow=new Window(); ToolUiTheme(paletteWindow,colors);
@@ -130,7 +135,10 @@ internal static partial class Program
             Check(geometry.Bands.Length>=2 && geometry.Bands.All(b=>geometry.Viewport.Contains(b)) && geometry.Bands.All(b => app.ActiveWindow.RangeFromPoint(b.Right-1,b.Bottom-1) != null),"focus COM: row and column bands clipped to visible grid");
             using(var focus = new FocusOverlay(()=>application,action=>action(),settings))
             {
-                SetForegroundWindow(FocusOverlay.ActiveWindowHandle(application)); focus.Toggle(); PumpUntil(()=>focus.IsVisible,3000);
+                IntPtr focusWindow = FocusOverlay.ActiveWindowHandle(application);
+                bool foregroundSet = SetForegroundWindow(focusWindow);
+                Console.WriteLine("Focus visibility precondition: activation=" + foregroundSet + "; foreground=" + TestForegroundWindow() + "; Excel=" + focusWindow + "; exposed=" + FocusOverlay.WorksheetExposed(focusWindow) + "; ready=" + app.Ready);
+                focus.Toggle(); PumpUntil(()=>focus.IsVisible,3000);
                 Check(focus.IsVisible, "focus COM: owned transparent overlay actually visible");
                 int updates=focus.UpdateCount; alpha.Range["D4"].Select();
                 Check(focus.UpdateCount>updates,"focus COM: selection event renders synchronously without timer or queued macro");
@@ -158,6 +166,7 @@ internal static partial class Program
         finally { app.Visible=visible; if(book!=null)book.Close(false); foreach(var item in owned.AsEnumerable().Reverse()) if(Marshal.IsComObject(item))Marshal.FinalReleaseComObject(item); }
     }
     [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr window);
+    [DllImport("user32.dll", EntryPoint="GetForegroundWindow")] private static extern IntPtr TestForegroundWindow();
     private static void ToolUiTheme(Window window,NavigationSettings colors)
     {window.Resources.MergedDictionaries.Add(new ResourceDictionary {Source=new Uri("/SheetPilot.UI;component/Styles.xaml",UriKind.Relative)});using(var model=new NavigationModel(colors)) using(var view=new NavigationView(model)) window.Resources=view.Resources;window.FontFamily=new System.Windows.Media.FontFamily("Microsoft YaHei UI");window.FontSize=12;}
     private static string FormatSnapshot(dynamic cell) => string.Join("|",new object[]{cell.NumberFormat,cell.HorizontalAlignment,cell.VerticalAlignment,cell.IndentLevel,cell.WrapText,cell.Font.Bold,cell.Interior.Color});

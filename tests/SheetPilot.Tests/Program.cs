@@ -22,12 +22,15 @@ internal static partial class Program
     {
         try
         {
+            Console.WriteLine("Test process: " + (Environment.Is64BitProcess ? "x64" : "x86"));
             if(args.Length>2 && args[0]=="--interactive") { InteractiveTests(Path.GetFullPath(args[1]),Path.GetFullPath(args[2])); return 0; }
             if (args.Length > 0 && args[0] == "--color-picker-host") { ColorPickerHostTests(); return 0; }
+            if (args.Length > 0 && args[0] == "--copy-excel") { int pid = CopyExcelTests(args.Length > 1 ? Path.GetFullPath(args[1]) : null); CopyExcelExitCheck(pid); return 0; }
             SearchTests();
             SettingsTests();
             PreferenceTests();
             FeatureCoreTests();
+            CopyCoreTests();
             RegressionTests();
             FeatureRenderTests(args.Length > 1 && args[0] == "--render" ? args[1] : null);
             UiTests(args.Length > 1 && args[0] == "--render" ? args[1] : null);

@@ -92,6 +92,33 @@ namespace SheetPilot.UI
             ToolUi.Number(conversion, preferences, "ConversionLimit", "每次最多处理单元格数", 100, 200000);
             conversion.Children.Add(ToolUi.Note("只转换常量；公式、空白、错误、合并单元格和锁定单元格跳过。日期型数值转为底层序列文本。绿色角标由 Excel 后台错误检查控制。"));
 
+            if (preferences.Copy == null) preferences.Copy = new CopyOptions();
+            var copy = Section("copy", "原样复制", "两个复制按钮共用；输出到新工作簿，保持原单元格位置");
+            var copyOptions = preferences.Copy;
+            ToolUi.Choice(copy, copyOptions, "Scope", "复制范围", "当前选择区域（支持不连续选区）", "当前工作表已使用区域");
+            ToolUi.Check(copy, copyOptions, "EmptySelectionUsesUsedRange", "选中单个空白格时改为复制已使用区域");
+            ToolUi.Check(copy, copyOptions, "TrimWholeRowsColumns", "整行 / 整列选择自动裁到已使用区域");
+            ToolUi.Check(copy, copyOptions, "VisibleCellsOnly", "只复制可见单元格（保留位置，隐藏处留空）");
+            copy.Children.Add(ToolUi.Heading("排版与外观"));
+            ToolUi.Check(copy, copyOptions, "CellFormats", "保留字体、填充、边框与对齐");
+            ToolUi.Check(copy, copyOptions, "NumberFormats", "保留数字格式（日期、百分比、小数位等）");
+            ToolUi.Check(copy, copyOptions, "RowHeights", "保留行高");
+            ToolUi.Check(copy, copyOptions, "ColumnWidths", "保留列宽");
+            ToolUi.Check(copy, copyOptions, "HiddenState", "保留行列隐藏状态（仅在复制全部单元格时）");
+            ToolUi.Check(copy, copyOptions, "MergedCells", "保留合并单元格");
+            ToolUi.Check(copy, copyOptions, "Notes", "保留单元格批注（传统备注）");
+            ToolUi.Check(copy, copyOptions, "ViewSettings", "保留缩放比例、网格线和行列标题显示");
+            ToolUi.Choice(copy, copyOptions, "ConditionalFormatting", "条件格式", "固定当前颜色、字体与边框，不复制规则", "仅保留基础格式，移除条件格式");
+            copy.Children.Add(ToolUi.Note("固定外观不包含数据条或图标集；遇到这类规则会提示调整设置。图片、图表、形状、数据验证、超链接及打印设置不随选区复制。合并区域必须完整选中。"));
+            copy.Children.Add(ToolUi.Heading("公式与完成行为"));
+            ToolUi.Choice(copy, copyOptions, "FormulaFallback", "内部公式版：遇到范围外或无法确认依赖的公式", "转为当前计算值，并在结果提示中统计", "停止复制，提示首个不能保留的公式");
+            copy.Children.Add(ToolUi.Note("保留明确的范围内 A1 引用及支持的普通函数。跨表 / 跨簿、命名区域、结构化引用、动态引用、数组 / 溢出和未知函数转值或停止。仅数值版把全部公式转为当前值；复制前请确认源表已计算完成。"));
+            ToolUi.Check(copy, copyOptions, "KeepSourceActive", "完成后仍停留在源工作表");
+            copy.Children.Add(ToolUi.Heading("大范围保护"));
+            ToolUi.Number(copy, copyOptions, "CellLimit", "每次最多复制单元格数", 100, 5000000);
+            ToolUi.Number(copy, copyOptions, "AppearanceLimit", "最多固定条件格式单元格数", 100, 100000);
+            copy.Children.Add(ToolUi.Note("复制时状态栏显示阶段，可按 Esc 取消；单次 Excel 内部粘贴结束后才会响应。出错或取消时关闭未完成的结果。源表不写入，结果不自动保存；如需撤销复制，关闭结果工作簿即可。"));
+
             var rename = Section("rename", "批量重命名", "下次打开时使用的默认规则");
             rename.Children.Add(ToolUi.RenameControls(preferences.Rename, true));
             rename.Children.Add(ToolUi.Note("应用前仍需检查预览。修改不自动保存工作簿；GridPilot 可撤销最近一次成功的修改，目标内容需未被再次编辑。"));

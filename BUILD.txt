@@ -25,3 +25,7 @@ Excel 被第三方加载项或安全策略阻止退出时，测试应失败并�
   .\tests\SheetPilot.Tests\bin\Release\net462\SheetPilot.Tests.exe --render .\preview
 
 目标机人工验收清单见 VALIDATION.txt。源代码编译成功不能替代 Excel 2010 真机兼容测试。
+
+原样复制集成测试（需安装桌面 Excel）
+----------------------------------
+构建后运行 tests\SheetPilot.Tests\bin\Release\net462\SheetPilot.Tests.exe --copy-excel dist\GridPilot-x64.xll。测试创建并关闭独立的 Excel 实例，使用合成数据；请按宿主位数选择 XLL。记录复制正确性、回滚、性能、打包命令注册和进程退出。该专项与 --excel 原有功能集成测试分别运行。

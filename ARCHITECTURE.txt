@@ -195,3 +195,7 @@ PreferencesWindow 从 ToolUi 中独立出来，维护分类到内容区域的映
 双向同步，所有卡片共用同一ScrollViewer与偏好对象。外观设置变化即时更新资源字典，
 关闭时解除订阅；不创建浏览器，不更改既有配置文件格式。
 参考：https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-updatelayeredwindow
+
+原样复制（v0.7.0）
+------------------
+Core/CopyPlanning.cs：范围覆盖与保守公式词法分析，不调用 Evaluate 或 DirectPrecedents。Excel/SelectionCopy.cs：原生排版复制、32768 单元格分块、公式连续段合并写入、递归分组行列布局、条件格式显示快照；所有 Office 调用留在 STA。只创建新结果，失败关闭结果并恢复应用状态；不改变全局计算模式。筛选区域按可见/隐藏连续段复制，防止 Excel 压缩隐藏行。详细行为见 COPYING.txt。
