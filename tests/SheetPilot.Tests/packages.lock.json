@@ -11,18 +11,35 @@
           "Microsoft.NETFramework.ReferenceAssemblies.net462": "1.0.3"
         }
       },
+      "jieba.NET": {
+        "type": "Transitive",
+        "resolved": "0.42.2",
+        "contentHash": "QHt38dXnEGd1ZeZCBwW1oFAVzXULxQ6fxZG502gNR6n53Vt+7Ivs4+JzBsGT2tI/7HocL6vT1KcdrVpm+YVS9w==",
+        "dependencies": {
+          "Newtonsoft.Json": "12.0.3"
+        }
+      },
       "Microsoft.NETFramework.ReferenceAssemblies.net462": {
         "type": "Transitive",
         "resolved": "1.0.3",
         "contentHash": "IzAV30z22ESCeQfxP29oVf4qEo8fBGXLXSU6oacv/9Iqe6PzgHDKCaWfwMBak7bSJQM0F5boXWoZS+kChztRIQ=="
       },
+      "Newtonsoft.Json": {
+        "type": "Transitive",
+        "resolved": "13.0.3",
+        "contentHash": "HrC5BXdl00IP9zeV+0Z848QWPAoCr9P3bDEZguI+gkLcBKAOxix/tLEAAHC+UvDNPv4a2d18lOReHMOagPa+zQ=="
+      },
       "sheetpilot.core": {
-        "type": "Project"
+        "type": "Project",
+        "dependencies": {
+          "Newtonsoft.Json": "[13.0.3, )",
+          "jieba.NET": "[0.42.2, )"
+        }
       },
       "sheetpilot.ui": {
         "type": "Project",
         "dependencies": {
-          "SheetPilot.Core": "[0.1.0, )"
+          "SheetPilot.Core": "[0.7.0, )"
         }
       }
     },

@@ -14,10 +14,14 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Tests failed.' }
     & '.\tests\SheetPilot.Tests\bin\Release\net462\SheetPilot.Tests.exe' --color-picker-host
     if ($LASTEXITCODE -ne 0) { throw 'Cold native-host color picker tests failed.' }
+    & '.\tests\SheetPilot.Tests\bin\Release\net462\SheetPilot.Tests.exe' --release-features
+    if ($LASTEXITCODE -ne 0) { throw 'Release feature tests failed.' }
     New-Item -ItemType Directory -Force 'dist' | Out-Null
     Copy-Item -LiteralPath 'src\SheetPilot.Excel\bin\Release\net462\publish\SheetPilot-AddIn-packed.xll' -Destination 'dist\GridPilot-x86.xll'
     Copy-Item -LiteralPath 'src\SheetPilot.Excel\bin\Release\net462\publish\SheetPilot-AddIn64-packed.xll' -Destination 'dist\GridPilot-x64.xll'
-    foreach ($file in @('README.txt','COPYING.txt','VALIDATION.txt','FIX-COLOR-PICKER.txt','SETTINGS.txt','Check-Environment.ps1','EXCEL-DNA-LICENSE.txt','THIRD-PARTY-NOTICES.txt')) { Copy-Item -LiteralPath $file -Destination 'dist' }
-    @('dist\GridPilot-x86.xll','dist\GridPilot-x64.xll') | Get-FileHash -Algorithm SHA256 | ForEach-Object { $_.Hash + '  ' + [IO.Path]::GetFileName($_.Path) } | Set-Content 'dist\SHA256SUMS.txt' -Encoding ASCII
+    Copy-Item -LiteralPath 'src\SheetPilot.Core\bin\Release\net462\Resources' -Destination 'dist' -Recurse -Force
+    foreach ($file in @('README.txt','RELEASE-v0.8.0.md','COPYING.txt','MASKING.txt','SEGMENTATION.txt','VALIDATION.txt','FIX-COLOR-PICKER.txt','SETTINGS.txt','Check-Environment.ps1','EXCEL-DNA-LICENSE.txt','JIEBA-NET-LICENSE.txt','JIEBA-LICENSE.txt','NEWTONSOFT-JSON-LICENSE.txt','THIRD-PARTY-NOTICES.txt')) { Copy-Item -LiteralPath $file -Destination 'dist' }
+    $packageRoot=(Resolve-Path dist).Path
+    Get-ChildItem -LiteralPath $packageRoot -File -Recurse | Where-Object Name -ne 'SHA256SUMS.txt' | Sort-Object FullName | Get-FileHash -Algorithm SHA256 | ForEach-Object { $_.Hash + '  ' + $_.Path.Substring($packageRoot.Length+1).Replace('\','/') } | Set-Content 'dist\SHA256SUMS.txt' -Encoding ASCII
     Write-Host 'Portable add-ins are ready in dist/.'
 } finally { Pop-Location }

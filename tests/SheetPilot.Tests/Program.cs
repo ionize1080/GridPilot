@@ -22,7 +22,10 @@ internal static partial class Program
     {
         try
         {
+            if(args.Length==0 && Path.GetFileNameWithoutExtension(System.Reflection.Assembly.GetExecutingAssembly().Location).Contains("Compatibility")) return CompatibilityRunner();
             Console.WriteLine("Test process: " + (Environment.Is64BitProcess ? "x64" : "x86"));
+            if(args.Length>2 && args[0]=="--release-ui") {ReleaseUiSmoke(Path.GetFullPath(args[1]),Path.GetFullPath(args[2]));return 0;}
+            if(args.Length>0 && args[0]=="--release-features") { ReleaseFeatureTests(); if(args.Length>1 && args[1]=="--excel") ReleaseFeatureExcelTests(); Console.WriteLine("PASS "+checks+" assertions");return 0; }
             if(args.Length>2 && args[0]=="--interactive") { InteractiveTests(Path.GetFullPath(args[1]),Path.GetFullPath(args[2])); return 0; }
             if (args.Length > 0 && args[0] == "--color-picker-host") { ColorPickerHostTests(); return 0; }
             if (args.Length > 0 && args[0] == "--copy-excel") { int pid = CopyExcelTests(args.Length > 1 ? Path.GetFullPath(args[1]) : null); CopyExcelExitCheck(pid); return 0; }

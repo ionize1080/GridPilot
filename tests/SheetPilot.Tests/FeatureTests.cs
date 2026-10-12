@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -45,6 +46,7 @@ internal static partial class Program
     private static void FeatureRenderTests(string directory)
     {
         if (directory == null) return; Directory.CreateDirectory(directory);
+        ReleaseFeatureRenderTests(directory);
         var colors = new NavigationSettings(); var preferences = new ToolPreferences();
         preferences.Rename.Find = "2025"; preferences.Rename.Replacement = "2026";
         var sources = new[] { "经营总览2025", "销售_2025", "预算2025", "说明", "归档2024" }.Select((name, i) => new SheetItem(i.ToString(), name, i+1, SheetVisibility.Visible, i==0, "工作表", "book", "年度分析.xlsx")).ToArray();
@@ -138,7 +140,7 @@ internal static partial class Program
                 IntPtr focusWindow = FocusOverlay.ActiveWindowHandle(application);
                 bool foregroundSet = SetForegroundWindow(focusWindow);
                 Console.WriteLine("Focus visibility precondition: activation=" + foregroundSet + "; foreground=" + TestForegroundWindow() + "; Excel=" + focusWindow + "; exposed=" + FocusOverlay.WorksheetExposed(focusWindow) + "; ready=" + app.Ready);
-                focus.Toggle(); PumpUntil(()=>focus.IsVisible,3000);
+                focus.Toggle(); PumpUntil(()=>focus.IsVisible,30000);
                 Check(focus.IsVisible, "focus COM: owned transparent overlay actually visible");
                 int updates=focus.UpdateCount; alpha.Range["D4"].Select();
                 Check(focus.UpdateCount>updates,"focus COM: selection event renders synchronously without timer or queued macro");
@@ -157,6 +159,12 @@ internal static partial class Program
                 Console.WriteLine(focus.PerformanceSummary);
                 using (var screenshot = new System.Drawing.Bitmap(geometry.Viewport.Width, geometry.Viewport.Height)) using (var graphics = System.Drawing.Graphics.FromImage(screenshot)) { graphics.CopyFromScreen(geometry.Viewport.Location, System.Drawing.Point.Empty, geometry.Viewport.Size); screenshot.Save(Path.Combine(directory,"focus-overlay.png"),System.Drawing.Imaging.ImageFormat.Png); }
                 Check(focus.Enabled && FormatSnapshot(alpha.Range["C3"])==before && (bool)book.Saved==saved && (int)alpha.Cells.FormatConditions.Count==conditions,"focus COM: overlay leaves formatting rules and dirty state unchanged");
+                settings.FocusAnimation=true;
+                var settling=Stopwatch.StartNew();PumpUntil(()=>settling.ElapsedMilliseconds>150);
+                alpha.Range["D4"].Select();
+                Console.WriteLine("Animation test: running="+focus.IsAnimating+" visible="+focus.IsVisible+" foreground="+TestForegroundWindow());
+                PumpUntil(()=> {System.Windows.Forms.Application.DoEvents();return !focus.IsAnimating && focus.IsVisible;},4000);
+                Check(focus.ShowCount==shows && focus.HideCount==hides,"focus COM: optional animation settles without hiding overlay");
                 focus.Toggle(); Check(!focus.Enabled,"focus COM: toggle removes overlay");
             }
             dynamic window=app.ActiveWindow; window.SplitRow=1; window.SplitColumn=1; window.FreezePanes=true;

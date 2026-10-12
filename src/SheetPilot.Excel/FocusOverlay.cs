@@ -13,6 +13,8 @@ namespace SheetPilot.Excel
     {
         public Rectangle Viewport { get; set; }
         public Rectangle[] Bands { get; set; } = new Rectangle[0];
+        public Rectangle[] Panes { get; set; } = new Rectangle[0];
+        public Rectangle[] Cells { get; set; } = new Rectangle[0];
     }
     public sealed class FocusOverlay : IDisposable
     {
@@ -27,6 +29,10 @@ namespace SheetPilot.Excel
         private bool updating, disposed;
         private string signature, motion;
         private int lastMotion, lastPoll;
+        private FocusFrame displayed, destination, departure;
+        private readonly System.Diagnostics.Stopwatch animation = new System.Diagnostics.Stopwatch();
+        private string layout;
+        private int lastSelection;
         public int PresentCount { get; private set; }
         public int ShowCount { get; private set; }
         public int HideCount { get; private set; }
@@ -39,6 +45,7 @@ namespace SheetPilot.Excel
         }
         public bool Enabled { get; private set; }
         public bool IsVisible => layer?.Visible == true;
+        internal bool IsAnimating => animation.IsRunning;
         internal IntPtr OwnerHandle => owner;
         public FocusOverlay(Func<object> application, Action<Action> queue, ToolPreferences settings)
         {
@@ -63,6 +70,7 @@ namespace SheetPilot.Excel
                     // An SDI workbook in the same Excel instance must be allowed to acquire a new owner.
                     if(foreground==owner || activeProcess!=processId || ClassName(foreground)!="XLMAIN") return;
                 }
+                if (!immediate && animation.IsRunning) Animate();
                 int interval = unchecked(Environment.TickCount-lastMotion)>250 ? 100 : Math.Max(16, Math.Min(100, settings.FocusInterval));
                 if (!immediate && IsVisible && unchecked(Environment.TickCount-lastPoll)<interval) return;
                 lastPoll=Environment.TickCount;
@@ -83,10 +91,13 @@ namespace SheetPilot.Excel
             dynamic window = app.ActiveWindow;
             GetClientRect(hwnd, out Rect bounds);
             var origin = new Point(); ClientToScreen(hwnd, ref origin);
-            string nextMotion = hwnd + "|" + origin + "|" + bounds.Right + ":" + bounds.Bottom + "|" + window.ScrollRow + ":" + window.ScrollColumn + ":" + window.Zoom + ":" + window.View + "|" + app.ActiveCell.Address + "|" + settings.FocusColor + settings.FocusOpacity + settings.FocusRow + settings.FocusColumn + settings.ClearActiveCell;
+            string nextLayout = hwnd + "|" + origin + "|" + bounds.Right + ":" + bounds.Bottom + "|" + window.ScrollRow + ":" + window.ScrollColumn + ":" + window.Zoom + ":" + window.View + ":" + window.SplitRow + ":" + window.SplitColumn + ":" + window.FreezePanes + "|" + app.ActiveSheet.Name;
+            string nextMotion = nextLayout + "|" + app.ActiveCell.Address + "|" + app.ActiveCell.Width + ":" + app.ActiveCell.Height + "|" + settings.FocusColor + settings.FocusOpacity + settings.FocusRow + settings.FocusColumn + settings.ClearActiveCell + settings.FocusAnimation;
             if (motion == nextMotion && IsVisible) return;
             lastMotion=Environment.TickCount;
             if (edges.Count > 64 || owner != hwnd) edges.Clear();
+            // Geometry can change without a selection event (row resize, pane drag, DPI).
+            if (layout != nextLayout) edges.Clear();
             var frame = Capture(application(), settings, edges);
             motion = nextMotion;
             if (frame.Bands.Length == 0) { HideLayer(); return; }
@@ -95,13 +106,70 @@ namespace SheetPilot.Excel
             string next = frame.Viewport + "|" + string.Join(";", frame.Bands.Select(r => r.ToString())) + settings.FocusColor + settings.FocusOpacity;
             if (signature != next)
             {
-                layer.Present(frame, ColorTranslator.FromHtml(settings.FocusColor), settings.FocusOpacity);
+                bool glide = immediate && layout == nextLayout && IsVisible && AnimationAllowed() &&
+                    unchecked(Environment.TickCount - lastSelection) > 90 && CanInterpolate(displayed, frame);
+                departure = displayed; destination = frame;
+                animation.Reset();
+                if (glide) { animation.Start(); Animate(); }
+                else Present(frame);
                 signature = next; PresentCount++;
             }
+            layout = nextLayout;
+            if (immediate) lastSelection = Environment.TickCount;
             if (!layer.Visible) { layer.Show(new Owner(hwnd)); ShowCount++; }
             LastUpdateMilliseconds = watch.Elapsed.TotalMilliseconds; UpdateCount++;
             timings.Enqueue(LastUpdateMilliseconds); if(timings.Count>256)timings.Dequeue();
         }
+        private bool AnimationAllowed()
+        {
+            bool enabled = false;
+            return settings.FocusAnimation && !SystemInformation.HighContrast && !SystemInformation.TerminalServerSession &&
+                SystemParametersInfo(0x1042, 0, ref enabled, 0) && enabled;
+        }
+        private void Present(FocusFrame frame)
+        { layer.Present(frame, ColorTranslator.FromHtml(settings.FocusColor), settings.FocusOpacity); displayed = frame; }
+        private void Animate()
+        {
+            double progress = Math.Min(1, animation.Elapsed.TotalMilliseconds / 120.0);
+            if (!AnimationAllowed()) progress = 1;
+            Present(Interpolate(departure, destination, progress, settings));
+            if (progress >= 1) animation.Stop();
+        }
+        public static bool CanInterpolate(FocusFrame a, FocusFrame b)
+        {
+            if (a == null || b == null || a.Viewport != b.Viewport || a.Cells.Length == 0 ||
+                a.Cells.Length != b.Cells.Length || !a.Panes.SequenceEqual(b.Panes)) return false;
+            for (int i = 0; i < a.Cells.Length; i++)
+                if (Math.Abs(a.Cells[i].X-b.Cells[i].X) > b.Panes[i].Width/2 ||
+                    Math.Abs(a.Cells[i].Y-b.Cells[i].Y) > b.Panes[i].Height/2) return false;
+            return true;
+        }
+        public static FocusFrame Interpolate(FocusFrame a, FocusFrame b, double progress, ToolPreferences settings)
+        {
+            if (progress >= 1 || !CanInterpolate(a,b)) return b;
+            double t = 1-Math.Pow(1-Math.Max(0,progress),3);
+            var cells = new Rectangle[b.Cells.Length]; var bands = new List<Rectangle>();
+            for (int i=0;i<cells.Length;i++)
+            {
+                var x=a.Cells[i]; var y=b.Cells[i];
+                cells[i]=new Rectangle((int)Math.Round(x.X+(y.X-x.X)*t),(int)Math.Round(x.Y+(y.Y-x.Y)*t),
+                    (int)Math.Round(x.Width+(y.Width-x.Width)*t),(int)Math.Round(x.Height+(y.Height-x.Height)*t));
+                var pane=b.Panes[i]; var cell=cells[i];
+                if(settings.FocusRow) AddClippedBand(bands,Rectangle.Intersect(pane,new Rectangle(pane.Left,cell.Top,pane.Width,cell.Height)),y,settings.ClearActiveCell);
+                if(settings.FocusColumn) AddClippedBand(bands,Rectangle.Intersect(pane,new Rectangle(cell.Left,pane.Top,cell.Width,pane.Height)),y,settings.ClearActiveCell);
+            }
+            return new FocusFrame { Viewport=b.Viewport, Panes=b.Panes, Cells=cells, Bands=bands.ToArray() };
+        }
+        private static void AddClippedBand(List<Rectangle> bands, Rectangle band, Rectangle actual, bool clear)
+        {
+            var cut=Rectangle.Intersect(band,actual);
+            if(!clear || cut.Width<=0 || cut.Height<=0) { Add(bands,band); return; }
+            Add(bands,Rectangle.FromLTRB(band.Left,band.Top,band.Right,cut.Top));
+            Add(bands,Rectangle.FromLTRB(band.Left,cut.Bottom,band.Right,band.Bottom));
+            Add(bands,Rectangle.FromLTRB(band.Left,cut.Top,cut.Left,cut.Bottom));
+            Add(bands,Rectangle.FromLTRB(cut.Right,cut.Top,band.Right,cut.Bottom));
+        }
+        [DllImport("user32.dll")] private static extern bool SystemParametersInfo(uint action,uint parameter,ref bool value,uint flags);
         public static FocusFrame Capture(object application, ToolPreferences settings) => Capture(application, settings, null);
         private static FocusFrame Capture(object application, ToolPreferences settings, Dictionary<Rectangle, Rectangle> edges)
         {
@@ -121,6 +189,7 @@ namespace SheetPilot.Excel
                 regions.Add(Tuple.Create(viewport, ScreenRect(pane, cell)));
             }
             var bands = new List<Rectangle>();
+            var clippedPanes = new List<Rectangle>();
             foreach (var pair in regions)
             {
                 Rectangle viewport = pair.Item1, active = pair.Item2;
@@ -131,6 +200,7 @@ namespace SheetPilot.Excel
                     if (r.Left > viewport.Left && r.Left < viewport.Right && r.Top < viewport.Bottom && r.Bottom > viewport.Top) viewport.Width = r.Left - viewport.Left;
                     if (r.Top > viewport.Top && r.Top < viewport.Bottom && r.Left < viewport.Right && r.Right > viewport.Left) viewport.Height = r.Top - viewport.Top;
                 }
+                clippedPanes.Add(viewport);
                 if (settings.FocusRow)
                 {
                     var row = Rectangle.Intersect(viewport, new Rectangle(viewport.Left, active.Top, viewport.Width, active.Height));
@@ -144,13 +214,14 @@ namespace SheetPilot.Excel
                     if (settings.ClearActiveCell) Add(bands, Rectangle.FromLTRB(column.Left, Math.Max(column.Top, active.Bottom), column.Right, column.Bottom));
                 }
             }
-            return new FocusFrame { Viewport = grid, Bands = bands.ToArray() };
+            return new FocusFrame { Viewport = grid, Bands = bands.ToArray(), Panes=clippedPanes.ToArray(), Cells=regions.Select(p=>p.Item2).ToArray() };
         }
         internal static IntPtr ActiveWindowHandle(dynamic app)
         {
-            try { return GetAncestor(new IntPtr((int)app.ActiveWindow.Hwnd), 2); }
-            catch { return new IntPtr((int)app.Hwnd); }
+            try { var root=GetAncestor(new IntPtr((int)app.ActiveWindow.Hwnd), 2); if(root!=IntPtr.Zero && IsWindow(root)) return root; } catch { }
+            try { var fallback=new IntPtr((int)app.Hwnd); return IsWindow(fallback)?fallback:IntPtr.Zero; } catch { return IntPtr.Zero; }
         }
+        [DllImport("user32.dll")] private static extern bool IsWindow(IntPtr hwnd);
         [DllImport("user32.dll")] private static extern IntPtr GetAncestor(IntPtr hwnd, uint flags);
         private static Rectangle ClipToCells(dynamic window, Rectangle bounds)
         {
@@ -191,7 +262,7 @@ namespace SheetPilot.Excel
         }
         public void Dispose() { if (disposed) return; disposed = true; Enabled = false; events.Dispose(); timer.Dispose(); layer?.Dispose(); }
         private sealed class Owner : IWin32Window { public Owner(IntPtr handle) { Handle = handle; } public IntPtr Handle { get; } }
-        private void HideLayer() { if (IsVisible) { layer.Hide(); HideCount++; } }
+        private void HideLayer() { animation.Reset(); displayed=null; layout=null; signature=null; motion=null; if (IsVisible) { layer.Hide(); HideCount++; } }
         internal static bool WorksheetExposed(IntPtr hwnd)
         {
             if (GetForegroundWindow()!=hwnd || IsIconic(hwnd) || !IsWindowEnabled(hwnd)) return false;

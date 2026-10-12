@@ -60,7 +60,8 @@ internal static partial class Program
             sheet.Range["B2:D6"].Interior.Color = 0xDDFFDD; sheet.Range["B2:D6"].Borders.LineStyle = 1;
             sheet.Range["B2"].NumberFormat = "0.00%"; sheet.Range["B2"].HorizontalAlignment = -4108;
             sheet.Rows[2].RowHeight = 35; sheet.Rows[3].RowHeight = 27; sheet.Columns[2].ColumnWidth = 20; sheet.Columns[3].ColumnWidth = 25;
-            sheet.Range["B2"].AddComment("复制备注"); sheet.Range["B2:D6"].Select(); sheet.Calculate();
+            // Office 365 build 20326 can crash when AddComment targets an inactive cell.
+            sheet.Range["B2"].Select(); sheet.Range["B2"].AddComment("复制备注"); sheet.Range["B2:D6"].Select(); sheet.Calculate();
             app.Calculation = -4135; app.EnableEvents = false; app.ScreenUpdating = false; app.StatusBar = "original status"; book.Saved = true;
             var options = new CopyOptions();
             var sourceFormulas = ((object[,])sheet.Range["B2:D6"].Formula).Cast<object>().ToArray();
@@ -207,7 +208,7 @@ internal static partial class Program
         }
         finally
         {
-            if (app != null) { app.DisplayAlerts = false; app.Quit(); Marshal.FinalReleaseComObject((object)app); app = null; }
+            if (app != null) { try { app.DisplayAlerts = false; app.Quit(); } catch(COMException) { } Marshal.FinalReleaseComObject((object)app); app = null; }
         }
         // Return from the COM scope before testing finalizer-based cleanup (caller does this).
         Console.WriteLine("COPY EXCEL PASS " + checks + " assertions; owned pid=" + pid);

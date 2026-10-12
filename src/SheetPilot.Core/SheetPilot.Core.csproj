@@ -1,4 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup><TargetFramework>net462</TargetFramework></PropertyGroup>
   <ItemGroup><Reference Include="System.Runtime.Serialization" /></ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="jieba.NET" Version="0.42.2" GeneratePathProperty="true" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <Content Include="$(Pkgjieba_NET)/Resources/dict.txt;$(Pkgjieba_NET)/Resources/prob_emit.json;$(Pkgjieba_NET)/Resources/prob_trans.json" Link="Resources/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

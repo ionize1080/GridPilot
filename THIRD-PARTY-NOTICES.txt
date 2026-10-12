@@ -7,3 +7,13 @@ Its reference assemblies are not included in the portable XLL package.
 The installed Windows .NET Framework provides the runtime, WPF, WinForms and Microsoft.VisualBasic.
 
 The GridPilot application is separate from and is not endorsed by Microsoft or Excel-DNA.
+
+GridPilot 0.8 includes jieba.NET 0.42.2 by Anders Cui (MIT).
+Project: https://github.com/anderscui/jieba.net
+See JIEBA-NET-LICENSE.txt. The dictionary and HMM resource files in Resources/
+are copied unchanged from the locked NuGet package. jieba.NET is based on
+jieba by Sun Junyi: https://github.com/fxsjy/jieba (see JIEBA-LICENSE.txt).
+
+Newtonsoft.Json 13.0.3 by James Newton-King is included for jieba.NET resource
+loading and rule serialization. https://github.com/JamesNK/Newtonsoft.Json
+See NEWTONSOFT-JSON-LICENSE.txt (MIT).

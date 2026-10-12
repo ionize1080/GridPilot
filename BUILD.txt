@@ -29,3 +29,10 @@ Excel 被第三方加载项或安全策略阻止退出时，测试应失败并�
 原样复制集成测试（需安装桌面 Excel）
 ----------------------------------
 构建后运行 tests\SheetPilot.Tests\bin\Release\net462\SheetPilot.Tests.exe --copy-excel dist\GridPilot-x64.xll。测试创建并关闭独立的 Excel 实例，使用合成数据；请按宿主位数选择 XLL。记录复制正确性、回滚、性能、打包命令注册和进程退出。该专项与 --excel 原有功能集成测试分别运行。
+
+0.8新增：--release-features 运行分词、脱敏、公式关系和动画几何边界测试；
+--release-features --excel 另启动实际 Excel，验证干净文件生成、重算、重开、
+源文件不变、拒绝覆盖及独立进程退出。--excel 包含聚焦动画回归，需要交互桌面和前台 Excel。
+依赖新增 jieba.NET 0.42.2 与 Newtonsoft.Json 13.0.3；build.ps1 从锁定包复制
+Resources/dict.txt、prob_emit.json、prob_trans.json，许可随发布包分发。
+SHA256SUMS.txt 覆盖所有发布文件（校验文件自身除外），包括词典。

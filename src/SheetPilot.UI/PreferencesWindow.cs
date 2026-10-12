@@ -77,6 +77,7 @@ namespace SheetPilot.UI
             ToolUi.Number(focus, preferences, "FocusInterval", "滚动补偿间隔（毫秒）", 16, 100);
             ToolUi.Check(focus, preferences, "FocusRow", "高亮当前行"); ToolUi.Check(focus, preferences, "FocusColumn", "高亮当前列");
             ToolUi.Check(focus, preferences, "ClearActiveCell", "保持活动单元格清晰，不覆盖它");
+            ToolUi.Check(focus, preferences, "FocusAnimation", "短距离选格平滑跟随（遵循系统动画设置）");
             focus.Children.Add(ToolUi.Note("选区变化立即跟随。进入文件菜单、弹出菜单或离开 Excel 时暂停显示，回到表格后恢复；不随工作簿保存或打印。每次启动默认关闭。"));
 
             var conversion = Section("conversion", "文本与数值", "转换规则与数据保护");

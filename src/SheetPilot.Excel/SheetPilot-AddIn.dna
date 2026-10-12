@@ -2,4 +2,6 @@
   <ExternalLibrary Path="SheetPilot.Excel.dll" ExplicitExports="true" LoadFromBytes="true" Pack="true" />
   <Reference Path="SheetPilot.Core.dll" Pack="true" />
   <Reference Path="SheetPilot.UI.dll" Pack="true" />
+  <Reference Path="JiebaNet.Segmenter.dll" Pack="true" />
+  <Reference Path="Newtonsoft.Json.dll" Pack="true" />
 </DnaLibrary>

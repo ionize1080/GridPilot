@@ -1,12 +1,12 @@
 ﻿# GridPilot
 
-面向 Windows 桌面 Excel 的便携工具集。原生 Ribbon 搭配 WPF 界面，提供原样复制、工作表导航、批量重命名、临时行列聚焦和文本 / 数值转换。原 SheetPilot 自 v0.4 更名为 **GridPilot**。
+面向 Windows 桌面 Excel 的便携工具集。原生 Ribbon 搭配 WPF 界面，提供关系保持脱敏、中英文分词、原样复制、工作表导航、批量重命名、临时行列聚焦和文本 / 数值转换。原 SheetPilot 自 v0.4 更名为 **GridPilot**。
 
-**当前版本：v0.7.0 正式 Release。** 目标为 Windows 10 + Excel 2010 标准版；已在 Excel 16.0 64 位完成原样复制集成测试，Excel 2010 和 x86 Excel 加载仍需目标机验收。逐项测试结果见 [验证记录](VALIDATION.txt)。
+**当前版本：v0.8.0。** 本次以本机 Office 365 / Excel 16.0 64 位实测发布。保留 .NET Framework 4.6.2 和双位数 XLL 构建；**Office 2010、Windows 10 虚拟机和 32 位 Excel 未实测**。逐项结果见 [验证记录](VALIDATION.txt)。
 
 ## 下载与使用
 
-从 [Releases](https://github.com/ionize1080/GridPilot/releases) 下载 `GridPilot-0.7.0-portable.zip` 并解压。
+从 [Releases](https://github.com/ionize1080/GridPilot/releases) 下载 `GridPilot-0.8.0-portable.zip` 并完整解压。新增离线分词需要同目录 `Resources/` 词典文件夹，不要只复制 XLL。
 
 1. 在 Excel 的“关于”页面确认 **Excel 位数**，不要按 Windows 位数选择。
 2. 32 位 Excel 加载 `GridPilot-x86.xll`；64 位 Excel 加载 `GridPilot-x64.xll`。一次只加载一个。
@@ -16,6 +16,15 @@
 无需安装本插件、VSTO、浏览器组件或管理员权限。系统需已有 .NET Framework 4.6.2+；Windows 10 1607 及之后的正常系统满足这一运行基线。`Check-Environment.ps1` 提供只读检查。
 
 Excel-DNA 创建 Ribbon 和任务面板时会做当前用户的临时 COM 注册，所以便携不等同于完全不访问注册表。XLL 未进行发布者数字签名；加载仍受 Office 信任策略约束。
+
+## v0.8 更新
+
+- **关系保持脱敏**：逐列选择身份、金额或日期规则，共享逻辑字段保持跨表映射；支持公式经过关系验证与实际 Excel 重算，另存独立 `.xlsx`，源工作簿不变。
+- **中英文分词**：离线中文词典、英文/编号保护、专业词表、前30条预览；三种输出方式，结果写入新工作簿。
+- **可选聚焦平滑移动**：同视图邻近单元格之间约120毫秒过渡；默认关闭，尊重系统动画、高对比度与远程会话设置，快速连续选择和视图变化直接定位。
+- 脱敏预览与导出使用相同映射；不复制源样式、对象、宏、批注和连接。不支持的公式及不能验证的关系会停止导出，详见 [脱敏范围](MASKING.txt) 和 [分词说明](SEGMENTATION.txt)。
+
+<img src="docs/mask-fields.png" width="1000" alt="脱敏字段选择，真实 WPF 控件渲染" />
 
 ## v0.7 更新
 

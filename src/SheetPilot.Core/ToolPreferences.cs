@@ -45,6 +45,7 @@ namespace SheetPilot.Core
         [DataMember] public bool FocusColumn { get; set; } = true;
         [DataMember] public bool ClearActiveCell { get; set; } = true;
         [DataMember] public int FocusInterval { get; set; } = 33;
+        [DataMember] public bool FocusAnimation { get; set; }
         [DataMember] public bool PreserveVisualAlignment { get; set; } = true;
         [DataMember] public bool VisibleCellsOnly { get; set; }
         [DataMember] public bool PreserveLeadingZeros { get; set; } = true;

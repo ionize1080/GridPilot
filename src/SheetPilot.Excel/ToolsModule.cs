@@ -35,6 +35,8 @@ namespace SheetPilot.Excel
         public bool CanUndo => gateway.CanUndo;
         internal string PerformanceSummary => focus.PerformanceSummary;
         public IEnumerable<FeatureCommand> Commands => new[] {
+            new FeatureCommand("GridPilot_Mask", "数据脱敏", "选择字段、统一跨表映射；验证支持的公式关系后另存独立副本。", "", () => Run(OpenMask)),
+            new FeatureCommand("GridPilot_Segment", "中英文分词", "离线分词、专业词表和三种输出；预览后生成新工作簿。", "", () => Run(()=>Show(new SegmentationWindow(navigation.Settings,gateway.CaptureTextSelection(),Path.Combine(Path.GetDirectoryName(ExcelDnaUtil.XllPath),"Resources"),gateway.WriteTextOutput)))),
             new FeatureCommand("GridPilot_CopyInternal", "原样复制·内部公式", "复制到新工作簿，保留排版和范围内公式；外部及无法确认依赖的公式按设置转为当前值或停止。Esc 可取消。", "", () => Run(() => CopySelection(true))),
             new FeatureCommand("GridPilot_CopyValues", "原样复制·仅数值", "复制到新工作簿，所有公式转为当前值，保留文本、错误值与排版。复制选项位于统一设置。Esc 可取消。", "", () => Run(() => CopySelection(false))),
             new FeatureCommand("GridPilot_Rename", "批量重命名", "选择范围、查找替换与编号；检查预览后应用。", "", () => Run(OpenRename)),
@@ -61,6 +63,11 @@ namespace SheetPilot.Excel
         {
             var working = new ToolPreferences { Rename = settings.Rename.Clone() };
             Show(new RenameWindow(working, navigation.Settings, all => gateway.Capture(all), plan => { var result = gateway.ApplyRename(plan); navigation.Refresh(); Ribbon.Refresh(); return result; }, () => { settings.Rename = working.Rename.Clone(); store.Save(settings); return store.Status; }));
+        }
+        private void OpenMask()
+        {
+            var snapshot=gateway.CaptureMaskWorkbook();
+            Show(new MaskWindow(navigation.Settings,snapshot,ExcelGateway.SuggestMaskRules(snapshot),(result,path,cancel)=>gateway.ExportMask(snapshot,result,path,cancel)));
         }
         private void OpenSettings()
         {
