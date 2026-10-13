@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -15,6 +15,7 @@ namespace SheetPilot.Core
         public int Column { get; set; }
         public int StartRow { get; set; } = 2;
         public string Header { get; set; }
+        public string Reason { get; set; }
         public MaskKind Kind { get; set; }
         public string Domain { get; set; } = "";
         public decimal Factor { get; set; } = 1.7m;
@@ -35,6 +36,7 @@ namespace SheetPilot.Core
     {
         public string Name;
         public int Rows, Columns;
+        public List<HeaderMerge> HeaderMerges = new List<HeaderMerge>();
     }
     public sealed class MaskSnapshot
     {
@@ -48,12 +50,13 @@ namespace SheetPilot.Core
     {
         public MaskSnapshot Output;
         public int Changed, Formulas;
+        public Dictionary<string,string> IdentityMappings = new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase);
         public string Summary => "已验证 "+Changed+" 个常量替换、"+Formulas+" 条公式；输出仅含单元格数据与受支持公式。";
         public Dictionary<string,object> Calculated = new Dictionary<string,object>();
     }
     public static class MaskPlanner
     {
-        public static MaskResult Build(MaskSnapshot source,IReadOnlyList<MaskRule> rules,CancellationToken cancel)
+        public static MaskResult Build(MaskSnapshot source,IReadOnlyList<MaskRule> rules,CancellationToken cancel,bool replaceMentions=false)
         {
             if(rules.GroupBy(r=>r.Sheet+":"+r.Column).Any(g=>g.Count()>1)) throw new InvalidOperationException("同一列存在重复规则。");
             var byColumn=rules.ToDictionary(r=>r.Sheet+":"+r.Column);
@@ -91,6 +94,7 @@ namespace SheetPilot.Core
                 else
                 {
                     if(!(cell.Value is string original)) throw new InvalidOperationException(cell.Location+"：身份字段必须为文本，数值编号可能已经丢失精度。");
+                    if(IsPlaceholder(original))continue;
                     if(!mappings.TryGetValue(rule.Domain,out var map)) mappings.Add(rule.Domain,map=new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase));
                     if(!map.TryGetValue(original,out var mapped))
                     {
@@ -101,6 +105,13 @@ namespace SheetPilot.Core
                     replacement=mapped;
                 }
                 cell.Value=replacement; if(!Equals(replacement,sourceIndex[cell.Key].Value)) result.Changed++;
+            }
+            result.IdentityMappings=literalMap;
+            var matcher=new IdentityMatcher(literalMap);
+            if(replaceMentions)foreach(var cell in output.Cells.Where(c=>c.Formula==null && c.Value is string))
+            {
+                string text=(string)cell.Value,replacement=matcher.Replace(text,cancel);
+                if(replacement!=text){cell.Value=replacement;result.Changed++;}
             }
             if(result.Changed==0) throw new InvalidOperationException("没有需要脱敏的常量，请选择字段并检查起始行。");
             // Formula strings are tokenized: only complete string literals and sheet references change.
@@ -120,18 +131,11 @@ namespace SheetPilot.Core
                 if(!Equivalent(expected,second.Value)) throw new InvalidOperationException(cell.Location+"：公式结果未满足保留／映射规则；请为相关计算列设置对应字段，或调整脱敏范围。");
                 result.Calculated[cell.Key]=second.Value; result.Formulas++;
             }
-            long residualWork=0;
             foreach(var cell in output.Cells)
             {
                 cancel.ThrowIfCancellationRequested();
                 var texts=cell.Formula==null?new[]{cell.Value as string}:SafeFormula.TextLiterals(cell.Formula).Concat(new[]{result.Calculated[cell.Key] as string});
-                if(texts.Any(text=>text!=null && literalMap.Keys.Any(original=>
-                {
-                    if((++residualWork & 1023)==0)cancel.ThrowIfCancellationRequested();
-                    if(residualWork>20000000)throw new InvalidOperationException("身份原文残留扫描超过本版计算上限，请缩小工作簿。");
-                    return text.IndexOf(original,StringComparison.OrdinalIgnoreCase)>=0;
-                })))
-                    throw new InvalidOperationException(cell.Location+"：存在所选身份字段的原文残留，请纳入对应字段或移除不支持的文本引用。");
+                if(texts.Any(text=>matcher.Contains(text,cancel)))throw new InvalidOperationException(cell.Location+"：存在所选身份字段的原文残留，请启用同步替换其他位置的原文，或调整字段规则。");
             }
             // Verify equality and strict order within every transformed numerical domain after double conversion.
             foreach(var group in source.Cells.Where(c=>c.Formula==null && ruleFor(c)!=null && (ruleFor(c).Kind==MaskKind.Amount || ruleFor(c).Kind==MaskKind.Date) && c.Value is double).GroupBy(c=>ruleFor(c).Domain))
@@ -141,6 +145,7 @@ namespace SheetPilot.Core
             }
             return result;
         }
+        public static bool IsPlaceholder(string text) => new[]{"-","—","--","/","无","暂无","不适用","合计","总计","小计","N/A","NA"}.Contains((text??"").Trim(),StringComparer.OrdinalIgnoreCase);
         public static bool Equivalent(object a,object b)
         { if(a is double x && b is double y) return Math.Abs(x-y)<=1e-10*Math.Max(1,Math.Max(Math.Abs(x),Math.Abs(y))); return Equals(a,b) || a==null && Equals(b,0.0) || b==null && Equals(a,0.0); }
         private static string NewName(MaskKind kind,HashSet<string> used)

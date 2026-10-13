@@ -6,7 +6,17 @@
 不要把开发用 SDK 需求和最终用户的运行条件混淆。
 
 从源码根目录运行：
+  powershell -NoProfile -File .\prepare-browser.ps1
   powershell -NoProfile -File .\build.ps1
+
+v0.9 便携界面使用 Electron 44.7.0 Windows x64。prepare-browser.ps1 只下载、
+校验 SHA-256 并解压至 .temp/Browser，不安装软件。也可向 build.ps1 传入
+-BrowserRuntime 指向已解压运行时。App/ 为本地界面，无 npm 生产依赖。
+XLL 不再打入业务 DLL；dist/ 下 DLL、App、Browser、Resources 均需随包分发。
+浏览器界面开发测试：安装 Playwright 后运行 node tests/browser-smoke.cjs，
+PLAYWRIGHT_MODULE 可指定模块目录。调试端口仅由测试进程参数临时启用。
+v0.9 新增 --upgrade（逻辑）与 --upgrade-excel（实际 Excel 合成样例），
+以及 --upgrade <样本目录> <输出目录>（只读样本、另存结果）。
 
 依赖恢复需要 NuGet 网络；已有离线包目录时可用：
   powershell -NoProfile -File .\build.ps1 -PackageSource C:\path\to\nuget-feed

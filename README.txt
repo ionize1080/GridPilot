@@ -1,112 +1,21 @@
-GridPilot 0.8.0 — 便携式 Excel 工具集
-========================================
+GridPilot 0.9.0 portable
 
-提供 x86 / x64 两种 XLL，分词另需同目录 Resources 词典文件夹。
-本次按本机 Office 365 / Excel16 x64 实测发布；Office2010、Win10虚拟机及32位Excel
-尚未实测，不宣称已通过兼容验收。详情见 VALIDATION.txt。
+1. Fully extract the ZIP on 64-bit Windows 10/11. No installer and no WebView2 dependency.
+2. Choose GridPilot-x86.xll for 32-bit Excel, or GridPilot-x64.xll for 64-bit Excel.
+3. Keep all DLLs, App/, Browser/, Resources/ beside the XLL. Never copy the XLL alone.
+4. Close Excel before upgrading. Preserve GridPilot.navigation.json and GridPilot.tools.json.
 
-快速使用
---------
-1. 将整个压缩包解压到普通文件夹，不要在压缩包内直接运行。
-2. 在 Excel 2010 的「文件 → 帮助 → 关于 Microsoft Excel」确认 Excel 位数。
-   32 位 Excel 选择 GridPilot-x86.xll；64 位 Excel 选择 GridPilot-x64.xll。
-   按 Excel 位数选择，不能按 Windows 位数选择；一次只加载其中一个。
-3. 双击对应 XLL，或在 Excel 中用「文件 → 打开」选择它，按 Excel 提示启用加载项。
-4. 点击 Ribbon「GridPilot → 工作表导航」。首次点击才创建右侧面板。
-5. 选择「当前工作簿」或「所有已打开工作簿」，输入工作表名称，单击结果跳转。
+Runtime: .NET Framework 4.6.2+ already present; Electron 44.7.0 bundled for Windows x64.
+Complex windows start Chromium on demand and communicate by a current-user named pipe.
+No listening network port or remote web content. No global keyboard/mouse hooks.
+Temporary browser profile is removed on normal exit. Abnormal termination may leave a
+GridPilot-ui-* folder in TEMP; workbook snapshots are not written there.
 
-这是按次加载，无安装程序、无需管理员权限、不修改工作簿为宏格式。
-如果希望每次启动 Excel 自动加载，可自行通过「文件 → 选项 → 加载项 → 管理：Excel 加载项
-→ 转到 → 浏览」添加 XLL；这会让 Excel 记住文件路径，并非 Windows 安装。
-采用自动加载后，移动文件夹前先取消勾选原路径，移动后重新添加。
+Masking creates a new XLSX and refuses to overwrite existing files. Review suggestions
+and the preview before exporting. Amount/date rules are opt-in. Basic formatting can be
+preserved, including merged cells. Conditional formatting rules, shapes, notes, macros,
+external links, names and connections are not copied.
 
-功能
-----
-• 列出工作表、图表页、隐藏页、VeryHidden 页，保留 Excel 原始顺序。
-• 普通包含搜索；.* 正则开关；Aa 大小写开关；含隐藏页开关。
-• 当前页面有绿色圆点；同名 Sheet 通过副标题中的工作簿名区分。
-• 单击结果或按 Enter 跳转，↑ ↓ 选择；面板内 Ctrl+F 聚焦搜索，Esc 清空，F5 刷新。
-• 默认约 2 秒同步目录，可在设置中关闭或调整间隔；编辑单元格时等待 Excel 可操作。
-• 关闭面板可再次从 Ribbon 打开。拖动 Office 面板标题可以调整停靠位置。
-• 范围、正则、大小写和隐藏页选项跨启动保存；搜索词不保存。
-• 数字设置支持滑块或键入；悬停提示可关闭，背景、文字与强调色可自定义。
-• 右上角「设置」调整停靠位置、行高、行间距、字号及丰富显示选项，详见 SETTINGS.txt。
-
-范围说明
---------
-「所有已打开工作簿」指同一个 Excel 进程内的普通工作簿，不跨独立 Excel 进程；
-不读取受保护视图中的未启用文档，也不列出 IsAddin=true 的工作簿。
-范围搜索作用于 Sheet 名称，工作簿名作为结果说明显示。
-导航中的隐藏页可搜索，但不会自动取消隐藏；只有明确点击修改工具才会改动工作簿。
-Excel 2010 使用一个应用级面板。较新 Excel 按窗口创建面板，可在对应窗口再次打开导航。
-
-新增工具
---------
-数据脱敏：逐列规则、共享逻辑字段、跨表一致映射，支持公式关系验证后另存新的 .xlsx。
-原工作簿不变。输出只含数据与受支持公式，不保留源排版和对象，详见 MASKING.txt。
-中英文分词：离线词典、专业词表、预览与三种输出方式，详见 SEGMENTATION.txt。
-聚焦平滑移动：在设置中选择，默认关闭；邻近选择约120毫秒过渡，无持续闪烁。
-原样复制·内部公式：保留明确引用复制范围内部的普通公式，其余默认转为当前计算值。
-原样复制·仅数值：全部公式转为当前值。两者均输出到新建、未保存的工作簿，保持原坐标。
-统一「设置 → 原样复制」可调整范围、外观、行列布局、条件格式、公式策略及上限。
-状态栏显示进度；Esc 在当前 Excel 操作结束后取消，失败关闭未完成结果。详见 COPYING.txt。
-Ribbon 使用自行绘制的图标。旧版 Excel 的高 DPI 显示仍需目标机验证。
-批量重命名：当前/同进程所有工作簿，预览新旧名称，逐项排除，正则捕获替换，前后缀、
-大小写、编号、隐藏/图表页过滤。检查无冲突后才应用；不会自动保存工作簿。
-聚焦：临时透明行列覆盖层，不修改格式或条件格式，不参与打印。支持普通工作表视图，
-切换到其他程序时隐藏，重新启动默认关闭。颜色、透明度和行列开关位于独立设置按钮。
-转文本/转数值：只转换所选区域的常量。默认保持视觉对齐：原为常规的数字固定靠右，
-原为常规的文本固定靠左；已有居中等显式对齐、缩进和其他格式保持。
-转文本使用底层数值（日期会成为序列号文本），不会把显示格式转换成文字。
-默认保护前导零、长编号，跳过公式、空白、错误、合并单元格和受保护的锁定单元格。
-绿色角标需 Excel 的后台错误检查及“数字以文本存储”规则开启；插件不更改全局检查设置。
-“撤销上次操作”保存本次会话最近一次成功修改；如目标已再次编辑则拒绝覆盖。
-GridPilot 修改可能清除 Excel 自身撤销栈；请使用 GridPilot 的撤销按钮恢复本插件修改。
-
-升级改名：先取消旧 SheetPilot 自动加载并退出 Excel，再加载 GridPilot。
-保留旧 SheetPilot.settings.json，新导航配置不存在时会复制迁移，旧文件不会删除。
-新配置为 GridPilot.navigation.json 和 GridPilot.tools.json，均在 XLL 同目录。
-
-正则示例（先开启 .* 正则）
----------------------------
-^销售             以“销售”开头
-汇总$             以“汇总”结尾
-华东|华南         匹配任一词
-^Sheet\d+$        Sheet 后跟数字
-^(?!.*归档).*$    名称中不含“归档”
-表达式最多 512 字符；单条匹配约 40ms 超时，整次搜索约 200ms 预算。
-超时或语法错误会显示提示，不会执行表达式中的代码。
-
-便携性及运行条件
-----------------
-• XLL 内已打包业务、界面和运行 DLL；离线分词需要发布包内的 Resources 文件夹。
-  日常使用不需要网络，不上传单元格内容。请完整解压发布包。
-• 不使用 VBA、UserForm WebBrowser、WebView2、Electron、VSTO 或 Office.js。
-• 不需要在 Windows 中安装本加载项，也不需要运行 regsvr32。
-• 需要系统已有 .NET Framework 4.6.2 或更高版本。Win10 1607 及之后正常系统自带满足
-  要求的版本；未经升级的 Win10 1507/1511 不在本次免安装运行基线内。
-• Check-Environment.ps1 仅检查环境、识别 Excel.exe 位数，不安装组件或更改注册表。
-• Excel-DNA 创建 Ribbon/任务面板时会做当前用户的临时 COM 注册并清理，因此
-  “便携”不代表完全不访问注册表。企业策略禁止 HKCU 临时 COM 注册时，面板可能无法加载。
-• 日志写入 %TEMP%\GridPilot-<进程号>.log，最多约 1MB，记录操作和错误类型，
-  不记录搜索词、单元格内容或工作簿完整路径。只读目录可运行，但不能持久保存设置。
-• 本版 XLL 未进行发布者数字签名。若从互联网下载被标记，核对来源和校验值后可在
-  文件属性中解除该文件的阻止；不要为此关闭 Excel 的全部安全设置。
-
-移除与升级
-----------
-按次加载：退出 Excel 后即可删除或替换 XLL。
-自动加载：先在 Excel 加载项列表取消勾选，再退出 Excel 后删除或替换。
-不要在 Excel 尚未退出时覆盖已加载的文件；不要同时加载不同目录中的两个副本。
-
-开发与扩展
-----------
-source/ 内含完整源码、模块接口、构建脚本、测试和架构文档。
-开发机需要 .NET SDK 8/9 或对应 Visual Studio；终端用户不需要 SDK。
-详见 source/ARCHITECTURE.txt 和 source/BUILD.txt。
-
-依据
-----
-Excel-DNA Ribbon/任务面板接口：https://excel-dna.net/reference-various/
-Excel-DNA 1.9 运行基线：https://github.com/Excel-DNA/ExcelDna/releases
-.NET 与 Windows 版本对应：https://learn.microsoft.com/en-us/dotnet/framework/install/versions-and-dependencies
+Tested here: Windows 11 + Excel 16 x64. Target Windows 10 21H1 + Excel 2010 has NOT been
+verified on a real machine. See RELEASE-v0.9.0.md and VALIDATION.txt for exact coverage.
+Portable does not bypass Office trust policies or enterprise execution restrictions.

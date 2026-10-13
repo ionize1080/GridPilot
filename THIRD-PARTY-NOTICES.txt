@@ -1,4 +1,4 @@
-GridPilot includes unmodified Excel-DNA 1.9.0 loader and integration components.
+﻿GridPilot includes unmodified Excel-DNA 1.9.0 loader and integration components.
 Excel-DNA project: https://github.com/Excel-DNA/ExcelDna
 Copyright and redistribution terms: see EXCEL-DNA-LICENSE.txt (zlib-style license).
 
@@ -17,3 +17,14 @@ jieba by Sun Junyi: https://github.com/fxsjy/jieba (see JIEBA-LICENSE.txt).
 Newtonsoft.Json 13.0.3 by James Newton-King is included for jieba.NET resource
 loading and rule serialization. https://github.com/JamesNK/Newtonsoft.Json
 See NEWTONSOFT-JSON-LICENSE.txt (MIT).
+
+
+v0.9 Portable Chromium UI
+Electron 44.7.0 (MIT), Chromium/Node.js and third-party components distributed in Browser/.
+Full licenses are in Browser/LICENSE and Browser/LICENSES.chromium.html, retained unchanged.
+Source/runtime: https://github.com/electron/electron/releases/tag/v44.7.0
+Runtime SHA-256: EEE30DC8FA1F5EA95490E59F44E46EA68DD24C6E93D22FACF70FE5C2D4C2665C
+Reference icon guidance: https://learn.microsoft.com/en-us/windows/apps/design/iconography/app-icon-design
+Icons are original code-drawn assets; no external icon artwork copied.
+Test corpus: https://github.com/apache/poi/tree/trunk/test-data/spreadsheet (Apache-2.0).
+Test samples and user workbooks are NOT included in releases.

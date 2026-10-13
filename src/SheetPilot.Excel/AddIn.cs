@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Xml.Linq;
@@ -73,6 +73,7 @@ namespace SheetPilot.Excel
         public void OnLoad(IRibbonUI ribbon) { ui = ribbon; }
         public static void Refresh() { try { ui?.Invalidate(); } catch { } }
         public override object LoadImage(string imageId) => RibbonIcons.Get(imageId, ExcelDnaUtil.WindowHandle);
+        public object GetImage(IRibbonControl control) => RibbonIcons.Picture(control.Id, ExcelDnaUtil.WindowHandle, AddIn.Tools?.IconTheme ?? 0);
         public bool GetPressed(IRibbonControl control) => AddIn.Tools?.FocusEnabled == true;
         public bool GetEnabled(IRibbonControl control) => control.Id != "GridPilot_Undo" || AddIn.Tools?.CanUndo == true;
         public void OnToggle(IRibbonControl control, bool pressed) => OnCommand(control);
@@ -100,7 +101,7 @@ namespace SheetPilot.Excel
                     {
                         bool toggle = command.Id == "GridPilot_Focus";
                         var button = new XElement(ns + (toggle ? "toggleButton" : "button"), new XAttribute("id", command.Id), new XAttribute("label", command.Label),
-                            new XAttribute("size", "large"), new XAttribute("image", command.Id), new XAttribute("screentip", command.Label),
+                            new XAttribute("size", "large"), new XAttribute("getImage", "GetImage"), new XAttribute("screentip", command.Label),
                             new XAttribute("supertip", command.Description), new XAttribute("getEnabled", "GetEnabled"), new XAttribute("onAction", toggle ? "OnToggle" : "OnCommand"));
                         if (toggle) button.Add(new XAttribute("getPressed", "GetPressed"));
                         group.Add(button);

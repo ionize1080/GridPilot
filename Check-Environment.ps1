@@ -1,6 +1,8 @@
-param([string]$ExcelPath)
+﻿param([string]$ExcelPath)
 $ErrorActionPreference = 'Stop'
 Write-Host 'GridPilot environment check (read-only)'
+if (-not [Environment]::Is64BitOperatingSystem) { Write-Warning 'This package bundles a 64-bit Chromium runtime and requires 64-bit Windows.' }
+foreach ($relative in @('Browser/electron.exe','App/main.js','SheetPilot.Excel.dll','SheetPilot.Core.dll','SheetPilot.UI.dll')) { if (-not (Test-Path (Join-Path $PSScriptRoot $relative))) { Write-Warning ('Missing portable file: '+$relative) } }
 $release = (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full' -ErrorAction SilentlyContinue).Release
 if ($release -ge 394802) { Write-Host '.NET Framework 4.6.2 or later: OK' }
 else { Write-Warning '.NET Framework 4.6.2 or later is required. No software will be installed by this script.' }

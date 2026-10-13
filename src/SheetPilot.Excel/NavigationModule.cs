@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.IO;
@@ -48,7 +48,7 @@ namespace SheetPilot.Excel
         private readonly Timer timer;
         private readonly Timer saveTimer;
         private readonly SettingsStore store;
-        private readonly ExcelEvents events;
+        private ExcelEvents events;
         private readonly NavigationSettings settings;
         public NavigationSettings Settings => settings;
         private readonly NativeLayoutGuard nativeLayout = new NativeLayoutGuard();
@@ -67,8 +67,7 @@ namespace SheetPilot.Excel
             saveTimer = new Timer { Interval = 400 };
             saveTimer.Tick += (s,e) => SaveSettings();
             settings.PropertyChanged += SettingsChanged;
-            events = new ExcelEvents(ExcelDnaUtil.Application);
-            try { events.Activation(Refresh); } catch (Exception ex) { Log.Error("Navigation events", ex); }
+
         }
         private void SettingsChanged(object sender, PropertyChangedEventArgs e)
         {
@@ -113,6 +112,7 @@ namespace SheetPilot.Excel
         public void Show()
         {
             if (disposed) return;
+            if(events==null){events=new ExcelEvents(ExcelDnaUtil.Application);try{events.Activation(Refresh);}catch(Exception ex){Log.Error("Navigation events",ex);}}
             // Office 2010 is MDI: one application pane. Office 2013+ uses one pane per window.
             IntPtr window = ExcelDnaUtil.WindowHandle;
             if (!sessions.TryGetValue(window, out var session))
@@ -170,6 +170,7 @@ namespace SheetPilot.Excel
                         if (session.Pane.Visible && !sessions.ContainsKey(ExcelDnaUtil.WindowHandle))
                         { Show(); sessions[ExcelDnaUtil.WindowHandle].Model.Query = session.Model.Query; }
                         Refresh();
+                        WorksheetFocus.Restore(ExcelDnaUtil.WindowHandle);
                     }
                     catch (Exception ex) { Log.Error("Navigate", ex); session.Model.Report(ex is InvalidOperationException ? ex.Message : "Excel 暂时无法跳转，请结束编辑后重试。"); }
                 });
@@ -181,7 +182,7 @@ namespace SheetPilot.Excel
             if (disposed) return;
             foreach (var session in sessions.Values) session.FlushWidth();
             disposed = true;
-            events.Dispose();
+            events?.Dispose();
             settings.PropertyChanged -= SettingsChanged;
             SaveSettings();
             saveTimer.Dispose();

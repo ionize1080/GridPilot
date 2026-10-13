@@ -1,3 +1,28 @@
+﻿v0.9 masking changes (supersedes conflicting historical limits below)
+
+Content limits: 2,000,000 cells for x64 Excel; 500,000 for x86 Excel. Formatting-only
+cells do not count. No 512-column cap. Formula evaluator range limits still apply.
+Header inference examines the first 40 content rows, including merged hierarchy.
+Heuristics are suggestions, not proof: correct header/data start, grouping and kinds
+before export. Money/date/classification fields remain opt-in.
+Placeholders (-, dash, no-data and total labels) are not treated as identities.
+Optional sync-mentions replaces matching identity text in other constants; it can
+change free text, so inspect the preview and retained fields. Formula string rewrites
+remain conservative and branch/lookup consistency is checked.
+
+Formatting retention is optional, enabled by default in new settings. It preserves
+basic cell fonts/fills/borders/number formats, dimensions, hidden rows/columns and merges.
+Conditional formatting rules and their dynamic display effects are not preserved.
+Source styles are transferred without source values, worksheet objects or relationships.
+Matching identity literals in style attributes are replaced. Other static text in
+custom formats/theme metadata may remain and must be reviewed when sharing externally.
+Output worksheet names remain neutral Sheet1, Sheet2 etc. Hidden source worksheets are
+included as visible output worksheets for inspection, as in v0.8.
+Source workbook is not edited; private temporary snapshots are removed on normal exit.
+Source changes after preview reject export. Existing destination files are never overwritten.
+
+Historical v0.8 details:
+
 GridPilot 0.8 — 关系保持脱敏
 ==========================
 

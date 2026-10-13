@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -118,7 +118,9 @@ internal static partial class Program
             dynamic book=app.Workbooks.Add(-4167),sheet=book.Worksheets[1];sheet.Name="发布验收";
             sheet.Range["A1:C3"].Value2=new object[,]{{"客户","代码","描述"},{"云川贸易有限公司","00123","绿色贷款 IFRS 9 MAS 610"},{"海原科技有限公司","00456","贷款余额 12.5% ABC001"}};
             sheet.Columns.ColumnWidth=28;sheet.Range["C2:C3"].Select();
-            Check((bool)app.RegisterXLL(addin),"release UI packed XLL registration");
+            var load=System.Diagnostics.Stopwatch.StartNew();
+            Check((bool)app.RegisterXLL(addin),"release UI packed XLL registration");Console.WriteLine("XLL register_ms="+load.ElapsedMilliseconds);
+            book.Worksheets.Add(Type.Missing,sheet).Name="导航验收";sheet.Activate();
             Console.WriteLine("Ready for UI smoke test");
             var timer=new System.Windows.Threading.DispatcherTimer {Interval=TimeSpan.FromMilliseconds(200)};
             var frame=new System.Windows.Threading.DispatcherFrame();var elapsed=System.Diagnostics.Stopwatch.StartNew();
@@ -128,9 +130,9 @@ internal static partial class Program
                 string path=Path.Combine(directory,"command.txt");if(!File.Exists(path))return;
                 string command=File.ReadAllText(path).Trim();File.Delete(path);
                 if(command=="close") {frame.Continue=false;return;}
-                if(command!="mask" && command!="segment")return;
+                if(command!="mask" && command!="segment" && command!="settings" && command!="navigation" && command!="focus")return;
                 book.Activate();sheet.Activate();sheet.Range["C2:C3"].Select();
-                app.Run(command=="mask"?"GridPilot_Mask":"GridPilot_Segment");
+                app.Run(command=="mask"?"GridPilot_Mask":command=="settings"?"GridPilot_Settings":command=="navigation"?"GridPilot_ShowNavigation":command=="focus"?"GridPilot_Focus":"GridPilot_Segment");
                 Console.WriteLine("Opened "+command);
             };
             timer.Start();System.Windows.Threading.Dispatcher.PushFrame(frame);timer.Stop();

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
@@ -29,6 +29,8 @@ internal static partial class Program
             if(args.Length>2 && args[0]=="--interactive") { InteractiveTests(Path.GetFullPath(args[1]),Path.GetFullPath(args[2])); return 0; }
             if (args.Length > 0 && args[0] == "--color-picker-host") { ColorPickerHostTests(); return 0; }
             if (args.Length > 0 && args[0] == "--copy-excel") { int pid = CopyExcelTests(args.Length > 1 ? Path.GetFullPath(args[1]) : null); CopyExcelExitCheck(pid); return 0; }
+            if(args.Length>0 && args[0]=="--upgrade") { UpgradeCoreTests(); if(args.Length>2)UpgradeExcelTests(args[1],args[2]);Console.WriteLine("PASS "+checks+" assertions");return 0;}
+            if(args.Length>0 && args[0]=="--upgrade-excel") {UpgradeCoreTests();string temporary=Path.Combine(Path.GetTempPath(),"GridPilot-upgrade-"+Guid.NewGuid().ToString("N"));string samples=Path.Combine(temporary,"samples");Directory.CreateDirectory(samples);UpgradeExcelTests(samples,Path.Combine(temporary,"output"));Console.WriteLine("PASS "+checks+" assertions");return 0;}
             SearchTests();
             SettingsTests();
             PreferenceTests();

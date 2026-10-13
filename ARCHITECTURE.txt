@@ -1,4 +1,29 @@
-﻿GridPilot：长期架构与扩展约定
+﻿v0.9 architecture (supersedes the historical decisions below)
+- Excel-DNA net462 XLL shim (~0.63/0.70 MiB), external managed assemblies.
+- Browser/Electron 44.7.0 win-x64 starts only on masking/settings, exits with its window.
+- App local HTML/CSS/JS; sandbox=true, contextIsolation=true, nodeIntegration=false.
+- Current-user-only named pipe, random per-window name; no TCP server. Windows GUI
+  Electron cannot reliably read inherited stdin, so named pipes are used explicitly.
+- A narrow message contract: init, preview, export, cancel, saveSettings, navigationSettings.
+- Detached snapshots and masking planning on worker threads. Excel COM only on queued
+  Excel macros; async context is restored before returning to Office.
+- Save dialog is owned by Chromium so it cannot hide behind Excel. Export verifies
+  active source identity/content and refuses existing targets. Cancellation closes no user workbook.
+- Source capture uses Find + bounded blocks; SpecialCells is avoided on the source
+  because Excel can mark a workbook dirty even on a read. Sparse content uses Find traversal.
+- Clean XLSX data written by an owned Excel instance; presentation-only XML parts can
+  be transferred from a private SaveCopyAs snapshot. No source worksheet objects or
+  relationships are copied. Reopen/recalculate validation precedes final file commit.
+- Identity trie replaces the old quadratic residual scan. Identity mentions outside
+  selected fields are changed only with the explicit sync-mentions option.
+- Lazy navigation/focus event subscription, cached supersampled Ribbon icons, reused
+  DIB overlay. Ripple samples update strips and stop at the configured endpoint.
+- Navigation restores the visible EXCEL7 child focus without hooks, synthetic keys,
+  AttachThreadInput, reparenting or global hotkeys. Excel 2010 MDI path remains to be verified.
+
+Historical architecture notes (v0.8 and earlier):
+
+GridPilot：长期架构与扩展约定
 =============================
 
 1. 技术决策

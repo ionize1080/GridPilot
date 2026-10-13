@@ -9,8 +9,10 @@ using SheetPilot.Core;
 
 namespace SheetPilot.Excel
 {
+    public sealed class RippleBand { public Rectangle Bounds; public int Opacity; }
     public sealed class FocusFrame
     {
+        public RippleBand[] Ripple { get; set; } = new RippleBand[0];
         public Rectangle Viewport { get; set; }
         public Rectangle[] Bands { get; set; } = new Rectangle[0];
         public Rectangle[] Panes { get; set; } = new Rectangle[0];
@@ -33,6 +35,7 @@ namespace SheetPilot.Excel
         private readonly System.Diagnostics.Stopwatch animation = new System.Diagnostics.Stopwatch();
         private string layout;
         private int lastSelection;
+        private readonly System.Diagnostics.Stopwatch ripple=new System.Diagnostics.Stopwatch();
         public int PresentCount { get; private set; }
         public int ShowCount { get; private set; }
         public int HideCount { get; private set; }
@@ -45,7 +48,7 @@ namespace SheetPilot.Excel
         }
         public bool Enabled { get; private set; }
         public bool IsVisible => layer?.Visible == true;
-        internal bool IsAnimating => animation.IsRunning;
+        internal bool IsAnimating => animation.IsRunning || ripple.IsRunning;
         internal IntPtr OwnerHandle => owner;
         public FocusOverlay(Func<object> application, Action<Action> queue, ToolPreferences settings)
         {
@@ -71,6 +74,7 @@ namespace SheetPilot.Excel
                     if(foreground==owner || activeProcess!=processId || ClassName(foreground)!="XLMAIN") return;
                 }
                 if (!immediate && animation.IsRunning) Animate();
+                else if(!immediate && ripple.IsRunning) AnimateRipple();
                 int interval = unchecked(Environment.TickCount-lastMotion)>250 ? 100 : Math.Max(16, Math.Min(100, settings.FocusInterval));
                 if (!immediate && IsVisible && unchecked(Environment.TickCount-lastPoll)<interval) return;
                 lastPoll=Environment.TickCount;
@@ -110,7 +114,8 @@ namespace SheetPilot.Excel
                     unchecked(Environment.TickCount - lastSelection) > 90 && CanInterpolate(displayed, frame);
                 departure = displayed; destination = frame;
                 animation.Reset();
-                if (glide) { animation.Start(); Animate(); }
+                if (immediate && settings.FocusRipple && AnimationAllowed(true) && unchecked(Environment.TickCount-lastSelection)>90)ripple.Restart();else ripple.Reset();
+                if (glide && !ripple.IsRunning) { animation.Start(); Animate(); }
                 else Present(frame);
                 signature = next; PresentCount++;
             }
@@ -120,10 +125,10 @@ namespace SheetPilot.Excel
             LastUpdateMilliseconds = watch.Elapsed.TotalMilliseconds; UpdateCount++;
             timings.Enqueue(LastUpdateMilliseconds); if(timings.Count>256)timings.Dequeue();
         }
-        private bool AnimationAllowed()
+        private bool AnimationAllowed(bool forRipple=false)
         {
             bool enabled = false;
-            return settings.FocusAnimation && !SystemInformation.HighContrast && !SystemInformation.TerminalServerSession &&
+            return (forRipple?settings.FocusRipple:settings.FocusAnimation) && !SystemInformation.HighContrast && !SystemInformation.TerminalServerSession &&
                 SystemParametersInfo(0x1042, 0, ref enabled, 0) && enabled;
         }
         private void Present(FocusFrame frame)
@@ -135,6 +140,40 @@ namespace SheetPilot.Excel
             Present(Interpolate(departure, destination, progress, settings));
             if (progress >= 1) animation.Stop();
         }
+        private void AnimateRipple()
+        {
+            double progress=Math.Min(1,ripple.Elapsed.TotalMilliseconds/(double)settings.RippleDuration);
+            if(!AnimationAllowed(true))progress=1;
+            if(progress>=1){ripple.Stop();Present(destination);return;}
+            Present(RippleFrame(destination,progress,settings));
+        }
+        public static FocusFrame RippleFrame(FocusFrame frame,double progress,ToolPreferences options)
+        {
+            if(frame==null || progress>=1)return frame;
+            var stripes=new List<RippleBand>();double distance=1-Math.Pow(1-Math.Max(0,progress),2);
+            int width=options.RippleWidth;double fade=Math.Pow(1-progress,1.3);
+            for(int i=0;i<frame.Cells.Length;i++)
+            {
+                var cell=frame.Cells[i];var pane=frame.Panes[i];
+                if(!pane.IntersectsWith(cell))continue;
+                int cx=cell.Left+cell.Width/2,cy=cell.Top+cell.Height/2;
+                for(int trail=0;trail<8;trail++)
+                {
+                    int bandWidth=Math.Max(1,width/8),alpha=(int)(options.RippleStrength*fade*Math.Sin((trail+1)*Math.PI/9));
+                    if(alpha<=0)continue;
+                    foreach(int direction in new[]{-1,1})
+                    {
+                        if(options.FocusRow)
+                        {int edge=direction<0?pane.Left:pane.Right;int x=cx+(int)((edge-cx)*distance)-direction*trail*bandWidth;var rect=Rectangle.Intersect(pane,new Rectangle(x,cell.Top,bandWidth,cell.Height));AddRipple(stripes,rect,cell,alpha);}
+                        if(options.FocusColumn)
+                        {int edge=direction<0?pane.Top:pane.Bottom;int y=cy+(int)((edge-cy)*distance)-direction*trail*bandWidth;var rect=Rectangle.Intersect(pane,new Rectangle(cell.Left,y,cell.Width,bandWidth));AddRipple(stripes,rect,cell,alpha);}
+                    }
+                }
+            }
+            return new FocusFrame {Viewport=frame.Viewport,Cells=frame.Cells,Panes=frame.Panes,Bands=frame.Bands,Ripple=stripes.ToArray()};
+        }
+        private static void AddRipple(List<RippleBand> output,Rectangle rect,Rectangle cell,int opacity)
+        {var bands=new List<Rectangle>();AddClippedBand(bands,rect,cell,true);foreach(var band in bands)output.Add(new RippleBand {Bounds=band,Opacity=opacity});}
         public static bool CanInterpolate(FocusFrame a, FocusFrame b)
         {
             if (a == null || b == null || a.Viewport != b.Viewport || a.Cells.Length == 0 ||
@@ -262,7 +301,7 @@ namespace SheetPilot.Excel
         }
         public void Dispose() { if (disposed) return; disposed = true; Enabled = false; events.Dispose(); timer.Dispose(); layer?.Dispose(); }
         private sealed class Owner : IWin32Window { public Owner(IntPtr handle) { Handle = handle; } public IntPtr Handle { get; } }
-        private void HideLayer() { animation.Reset(); displayed=null; layout=null; signature=null; motion=null; if (IsVisible) { layer.Hide(); HideCount++; } }
+        private void HideLayer() { animation.Reset(); ripple.Reset(); displayed=null; layout=null; signature=null; motion=null; if (IsVisible) { layer.Hide(); HideCount++; } }
         internal static bool WorksheetExposed(IntPtr hwnd)
         {
             if (GetForegroundWindow()!=hwnd || IsIconic(hwnd) || !IsWindowEnabled(hwnd)) return false;
@@ -302,7 +341,7 @@ namespace SheetPilot.Excel
             private IntPtr memory, bitmap, previousBitmap, pixels;
             private Size bitmapSize;
             private Rectangle[] previousBands = new Rectangle[0];
-            private int[] clearRow, colorRow;
+            private int[] clearRow, colorRow, rippleRow;
             private int lastColor;
             public void Present(FocusFrame frame, Color color, int opacity)
             {
@@ -314,19 +353,24 @@ namespace SheetPilot.Excel
                     bitmap=CreateDIBSection(memory,ref info,0,out pixels,IntPtr.Zero,0);
                     if(bitmap==IntPtr.Zero) throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
                     previousBitmap=SelectObject(memory,bitmap);bitmapSize=frame.Viewport.Size;
-                    clearRow=new int[bitmapSize.Width];colorRow=new int[bitmapSize.Width];lastColor=0;
+                    clearRow=new int[bitmapSize.Width];colorRow=new int[bitmapSize.Width];rippleRow=new int[bitmapSize.Width];lastColor=0;
                     Fill(new Rectangle(Point.Empty,bitmapSize),clearRow);
                 }
                 // Reuse the top-down DIB and update only the old/new stripes, not a full-screen
                 // managed Bitmap plus GDI copy per click. Pixels are opaque BGRA; the blend sets opacity.
                 foreach(var band in previousBands) Fill(band,clearRow);
-                if(lastColor!=color.ToArgb()) {lastColor=color.ToArgb();for(int x=0;x<colorRow.Length;x++)colorRow[x]=lastColor;}
+                int packed=Premultiplied(color,opacity);if(lastColor!=packed){lastColor=packed;for(int x=0;x<colorRow.Length;x++)colorRow[x]=packed;}
                 previousBands=frame.Bands.Select(b=>new Rectangle(b.X-frame.Viewport.X,b.Y-frame.Viewport.Y,b.Width,b.Height)).ToArray();
                 foreach(var band in previousBands) Fill(band,colorRow);
+                var dirty=previousBands.ToList();
+                foreach(var band in frame.Ripple)
+                {var bounds=new Rectangle(band.Bounds.X-frame.Viewport.X,band.Bounds.Y-frame.Viewport.Y,band.Bounds.Width,band.Bounds.Height);int value=Premultiplied(color,Math.Min(85,opacity+band.Opacity));for(int x=0;x<bounds.Width;x++)rippleRow[x]=value;Fill(bounds,rippleRow);dirty.Add(bounds);}
+                previousBands=dirty.ToArray();
                 var location=frame.Viewport.Location;var source=Point.Empty;var size=bitmapSize;
-                var blend=new Blend {Alpha=(byte)Math.Round(255*Math.Max(.05,Math.Min(.6,opacity/100.0))),Format=1};
+                var blend=new Blend {Alpha=255,Format=1};
                 if(!UpdateLayeredWindow(Handle,IntPtr.Zero,ref location,ref size,memory,ref source,0,ref blend,2)) throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
             }
+            private static int Premultiplied(Color color,int opacity){int a=255*opacity/100;return (a<<24)|((color.R*a/255)<<16)|((color.G*a/255)<<8)|(color.B*a/255);}
             private void Fill(Rectangle rectangle,int[] row)
             {
                 for(int y=rectangle.Top;y<rectangle.Bottom;y++)

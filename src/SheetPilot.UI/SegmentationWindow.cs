@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -45,7 +45,7 @@ namespace SheetPilot.UI
                     options.Terms=terms.Text; status.Text="正在分词，可取消…";
                     var rows=await Task.Run(()=> { var segmenter=new TextSegmenter(resources); var result=new List<TextOutput>(); foreach(var item in (export?input:input.Take(30))) { token.ThrowIfCancellationRequested(); result.Add(new TextOutput { Source=item,Words=segmenter.Split(item.Text,options,token) }); } return result; });
                     token.ThrowIfCancellationRequested(); grid.ItemsSource=rows.Take(30).ToArray();
-                    if(export) { var values=TextBatch.Layout(rows,options); output(values); status.Text="完成："+rows.Count+" 条文本，结果已写入新工作簿。";Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background,new Action(Close)); }
+                    if(export) { var values=TextBatch.Layout(rows,options); output(values); status.Text="完成："+rows.Count+" 条文本，结果已写入新工作簿。";_ = Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background,new Action(Close)); }
                     else status.Text="已预览前 "+rows.Count+" 条；生成结果时处理全部 "+input.Count+" 条。";
                 }
                 catch(OperationCanceledException) { status.Text="已取消，未写入结果。"; }

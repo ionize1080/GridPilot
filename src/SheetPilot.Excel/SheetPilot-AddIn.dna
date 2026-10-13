@@ -1,7 +1,7 @@
 <DnaLibrary Name="GridPilot" RuntimeVersion="v4.0" xmlns="http://schemas.excel-dna.net/addin/2020/07/dnalibrary">
-  <ExternalLibrary Path="SheetPilot.Excel.dll" ExplicitExports="true" LoadFromBytes="true" Pack="true" />
-  <Reference Path="SheetPilot.Core.dll" Pack="true" />
-  <Reference Path="SheetPilot.UI.dll" Pack="true" />
-  <Reference Path="JiebaNet.Segmenter.dll" Pack="true" />
-  <Reference Path="Newtonsoft.Json.dll" Pack="true" />
+  <ExternalLibrary Path="SheetPilot.Excel.dll" ExplicitExports="true" LoadFromBytes="false" Pack="false" />
+  <Reference Path="SheetPilot.Core.dll" Pack="false" />
+  <Reference Path="SheetPilot.UI.dll" Pack="false" />
+  <Reference Path="JiebaNet.Segmenter.dll" Pack="false" />
+  <Reference Path="Newtonsoft.Json.dll" Pack="false" />
 </DnaLibrary>

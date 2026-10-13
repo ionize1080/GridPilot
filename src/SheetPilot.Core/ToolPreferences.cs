@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Runtime.Serialization;
 using System.Runtime.Serialization.Json;
@@ -46,6 +46,13 @@ namespace SheetPilot.Core
         [DataMember] public bool ClearActiveCell { get; set; } = true;
         [DataMember] public int FocusInterval { get; set; } = 33;
         [DataMember] public bool FocusAnimation { get; set; }
+        [DataMember] public bool FocusRipple { get; set; } = true;
+        [DataMember] public int RippleDuration { get; set; } = 280;
+        [DataMember] public int RippleWidth { get; set; } = 36;
+        [DataMember] public int RippleStrength { get; set; } = 24;
+        [DataMember] public int IconTheme { get; set; }
+        [DataMember] public bool MaskReplaceMentions { get; set; } = true;
+        [DataMember] public bool MaskPreserveFormatting { get; set; } = true;
         [DataMember] public bool PreserveVisualAlignment { get; set; } = true;
         [DataMember] public bool VisibleCellsOnly { get; set; }
         [DataMember] public bool PreserveLeadingZeros { get; set; } = true;
@@ -57,9 +64,10 @@ namespace SheetPilot.Core
         [DataMember] public int ConversionLimit { get; set; } = 50000;
         [DataMember] public int DecimalCulture { get; set; }
         [OnDeserializing] private void Initialize(StreamingContext c)
-        { SchemaVersion = 1; Rename = new RenameOptions(); FocusColor = "#42AD91"; FocusOpacity = 20; FocusInterval = 33; PreserveVisualAlignment = FocusRow = FocusColumn = ClearActiveCell = PreserveLeadingZeros = ProtectPrecision = TrimNumericText = AllowThousands = NumberAsTextHint = true; ConversionLimit = 50000; }
+        { FocusRipple = MaskPreserveFormatting = MaskReplaceMentions = true; RippleDuration=280; RippleWidth=36; RippleStrength=24; SchemaVersion = 1; Rename = new RenameOptions(); FocusColor = "#42AD91"; FocusOpacity = 20; FocusInterval = 33; PreserveVisualAlignment = FocusRow = FocusColumn = ClearActiveCell = PreserveLeadingZeros = ProtectPrecision = TrimNumericText = AllowThousands = NumberAsTextHint = true; ConversionLimit = 50000; }
         public void Normalize()
         {
+            IconTheme=Math.Max(0,Math.Min(2,IconTheme)); RippleDuration=Math.Max(120,Math.Min(600,RippleDuration)); RippleWidth=Math.Max(12,Math.Min(100,RippleWidth)); RippleStrength=Math.Max(5,Math.Min(50,RippleStrength));
             if (Copy == null) Copy = new CopyOptions();
             Copy.Normalize();
             if (Rename == null) Rename = new RenameOptions();

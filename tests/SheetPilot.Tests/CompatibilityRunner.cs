@@ -16,8 +16,8 @@ internal static partial class Program
         form.Shown+=async (s,e)=>
         {
             string addin=Path.Combine(root,Environment.Is64BitProcess?"GridPilot-x64.xll":"GridPilot-x86.xll");
-            string[] names={"core","color-picker","release-features","excel-regression","copy-excel"};
-            string[] arguments={"","--color-picker-host","--release-features --excel","--excel \""+addin+"\"","--copy-excel \""+addin+"\""};
+            string[] names={"core","color-picker","release-features","upgrade-excel","excel-regression","copy-excel"};
+            string[] arguments={"","--color-picker-host","--release-features --excel","--upgrade-excel","--excel \""+addin+"\"","--copy-excel \""+addin+"\""};
             File.WriteAllText(Path.Combine(logs,"environment.txt"),"OS="+Environment.OSVersion+"\r\nProcess="+(Environment.Is64BitProcess?"x64":"x86")+"\r\nCLR="+Environment.Version+"\r\nUTC="+DateTime.UtcNow.ToString("o"));
             for(int i=0;i<names.Length;i++)
             {
