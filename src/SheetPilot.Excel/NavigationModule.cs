@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.IO;
@@ -117,7 +117,7 @@ namespace SheetPilot.Excel
             IntPtr window = ExcelDnaUtil.WindowHandle;
             if (!sessions.TryGetValue(window, out var session))
             {
-                session = new PaneSession(settings, nativeLayout, Refresh, Navigate, () => { if (settings.AutoRefresh) timer.Start(); Refresh(); });
+                session = new PaneSession(settings, nativeLayout, Refresh, Navigate, Edit, () => { if (settings.AutoRefresh) timer.Start(); Refresh(); });
                 session.Model.SettingsStatus = store.Status;
                 session.Model.SettingsSaveFailed = store.HasError;
                 sessions.Add(window, session);
@@ -177,6 +177,17 @@ namespace SheetPilot.Excel
             }
             catch (Exception ex) { session.NavigationPending = false; Log.Error("Queue navigation", ex); session.Model.Report("Excel 暂时无法接受跳转，请稍后重试。"); }
         }
+        private void Edit(PaneSession session,SheetEdit request)
+        {
+            if(disposed||session.NavigationPending)return;
+            session.NavigationPending=true;
+            ExcelAsyncUtil.QueueAsMacro(()=>
+            {
+                session.NavigationPending=false;if(disposed||session.Disposed)return;
+                try{if(!(gateway is ExcelGateway excel))throw new InvalidOperationException("当前环境不支持编辑工作表。");excel.EditSheet(request);Refresh();}
+                catch(Exception ex){session.Model.Report(ex is InvalidOperationException?ex.Message:"Excel 无法完成操作，请结束编辑并检查工作簿保护状态。");Log.Error("Edit sheet",ex);}
+            });
+        }
         public void Dispose()
         {
             if (disposed) return;
@@ -208,7 +219,7 @@ namespace SheetPilot.Excel
             private readonly Action becameVisible;
             public bool IsResizing => resizeTimer.Enabled;
             private bool applyingLayout;
-            public PaneSession(NavigationSettings settings, NativeLayoutGuard nativeLayout, Action refresh, Action<PaneSession, SheetItem> navigate, Action becameVisible)
+            public PaneSession(NavigationSettings settings, NativeLayoutGuard nativeLayout, Action refresh, Action<PaneSession, SheetItem> navigate, Action<PaneSession, SheetEdit> edit, Action becameVisible)
             {
                 this.settings = settings;
                 this.nativeLayout = nativeLayout;
@@ -241,6 +252,7 @@ namespace SheetPilot.Excel
                     Model.ScopeChanged += all => refresh();
                     Model.RefreshRequested += refresh;
                     Model.NavigateRequested += item => navigate(this, item);
+                    Model.EditRequested += request => edit(this, request);
                     Log.Write("Task pane created; dock=" + Pane.DockPosition + "; width=" + settings.PaneWidth + "; nativeWidth=" + Pane.Width);
                 }
                 catch { resizeTimer.Dispose(); layoutTimer.Dispose(); View.Dispose(); Model.Dispose(); control.Dispose(); if (Pane != null) { try { Pane.Delete(); } catch { } } throw; }

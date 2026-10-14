@@ -1,0 +1,48 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),os=require('node:os');
+const core=require('../App/database-core.cjs');
+const {DatabaseManager}=require('../App/database-main.cjs');
+const root=fs.mkdtempSync(path.join(os.tmpdir(),'GridPilot-db-test-'));let count=0;
+function check(value,label){assert(value,label);count++;console.log('PASS '+label);}
+const headers=['月份','贷款号','余额','流水号','备注'];
+const base={name:'synthetic',sheet:'Data',headerRow:2,headers,loanColumn:'贷款号',dateColumn:'月份',amountColumn:'余额',amountScale:2,mode:'snapshot',keys:[]};
+const report=values=>({sheet:'Data',date1904:false,rows:[{row:1,values:['Synthetic only']},{row:2,values:headers},...values.map((v,i)=>({row:i+3,values:v}))]});
+function fixture(mode='snapshot',keys=[]){const folder=fs.mkdtempSync(path.join(root,'source-')),db=folder+'.sqlite',reports=new Map();core.initialize(db,{...base,folder,mode,keys});return {folder,db,reports,put(name,rows){const file=path.join(folder,name);fs.writeFileSync(file,JSON.stringify(rows));reports.set(file,report(rows));return file;},scan(read){return core.scan(db,read||((f)=>reports.get(f)));},rows(sql='SELECT * FROM data ORDER BY __key',offset=0,size=100){return core.query(db,sql,offset,size);}};}
+(async()=>{
+  check(core.dateValue('202402')==='2024-02-01','month becomes snapshot date');
+  check(core.dateValue('2024/2/29')==='2024-02-29','leap day and date delimiters');
+  assert.throws(()=>core.dateValue('20230229'));assert.throws(()=>core.dateValue('60'));check(core.dateValue('0',true)==='1904-01-01','1904 workbook date system');
+  check(core.minor('1.2345E+2')===12345,'scientific cached amount parsed exactly');
+  check(core.minor('123.45000000000002',2,true)===12345,'Excel binary tail normalized at selected precision');assert.throws(()=>core.minor('123.45000000000002',2,false));assert.throws(()=>core.minor('123.451',2,true));
+  check(core.minor('1,234.56')===123456&&core.minor('-0.01')===-1,'exact signed minor currency units');
+  for(const value of ['1,23','1.001','NaN','900719925474099.99'])assert.throws(()=>core.minor(value));count++;
+  const f=fixture();const a=f.put('a.xlsx',[['202402','001','100.01','t1','甲'],['202402','','12.34','','空号']]);
+  await f.scan();check(f.rows().rows.length===2,'blank loan retained with amount');
+  check(f.rows('SELECT __loan FROM data WHERE __loan IS NOT NULL').rows[0][0]==='001','loan leading zero retained');
+  check(f.rows('SELECT SUM(__amount_minor) FROM data').rows[0][0]===11235,'amounts sum exactly');
+  check(f.rows('SELECT * FROM issues').rows.length===1,'missing loan visible in issues');
+  const b=f.put('b.xlsx',[['202403','001','90.00','t1','甲']]);await f.scan();check(f.rows().rows.length===3,'same loan at different dates remains separate');
+  check(f.rows('SELECT * FROM latest').rows.length===1,'latest snapshot only');
+  check((await f.scan()).changed===0,'unchanged scan is idempotent');
+  f.put('copy.xlsx',[['202403','001','90.00','t1','甲']]);await f.scan();check(f.rows().rows.length===3,'duplicate file does not double count');
+  check(f.rows('SELECT __sources FROM data WHERE __date=\'2024-03-01\'').rows[0][0]===2,'all duplicate file provenance retained');
+  f.put('copy.xlsx',[['202403','001','91.00','t1','甲']]);await f.scan();check(f.rows('SELECT * FROM data WHERE __conflict=1').rows.length===1,'conflicting revision flagged');
+  fs.unlinkSync(b);await f.scan();check(f.rows('SELECT * FROM data WHERE __conflict=1').rows.length===0,'deleted file contribution removed');
+  f.put('a.xlsx',[['202402','002','50.00','t2','new']]);await f.scan();check(f.rows('SELECT * FROM data WHERE __loan=\'001\' AND __date=\'2024-02-01\'').rows.length===0,'source row deletion and key edit reflected');
+  const before=f.rows('SELECT COUNT(*) FROM scans').rows[0][0];
+  f.put('bad.xlsx',[['bad-date','bad','7','','']]);await assert.rejects(f.scan());check(f.rows('SELECT COUNT(*) FROM scans').rows[0][0]===before,'failed scan rolls back all updates');fs.unlinkSync(path.join(f.folder,'bad.xlsx'));
+  f.put('change.xlsx',[['202405','006','6','','']]);await assert.rejects(f.scan(file=>{fs.appendFileSync(file,'changed');return f.reports.get(file);}));check(f.rows('SELECT COUNT(*) FROM scans').rows[0][0]===before,'concurrent file edit rolls back');fs.unlinkSync(path.join(f.folder,'change.xlsx'));
+  f.put('schema.xlsx',[['202406','006','6','','']]);await assert.rejects(f.scan(file=>file.endsWith('schema.xlsx')?{...f.reports.get(file),rows:[{row:2,values:['wrong']}]}:f.reports.get(file)));check(f.rows('SELECT COUNT(*) FROM scans').rows[0][0]===before,'schema drift rolls back');fs.unlinkSync(path.join(f.folder,'schema.xlsx'));
+  const cumulative=fixture('cumulative',['流水号']);cumulative.put('a.xlsx',[['202401','001','10','t1','a'],['202402','001','20','t2','b']]);cumulative.put('b.xlsx',[['202402','001','20','t2','b'],['202403','001','30','t3','c']]);await cumulative.scan();check(cumulative.rows().rows.length===3,'overlapping cumulative exports deduplicate by business key');
+  cumulative.put('b.xlsx',[['202402','001','25','t2','b'],['202403','001','30','t3','c']]);await cumulative.scan();check(cumulative.rows('SELECT COUNT(*) FROM issues').rows[0][0]===1,'same event revised amount produces conflict');
+  const weak=fixture('cumulative');const identical=['202401','1','10','','x'];weak.put('a.xlsx',[identical,identical]);weak.put('b.xlsx',[identical]);await weak.scan();check(weak.rows().rows.length===2,'weak-key import preserves within-file multiplicity');check(weak.rows('SELECT COUNT(*) FROM issues').rows[0][0]===2,'weak-key rows require review');
+  for(const sql of ['DELETE FROM files','UPDATE source_rows SET loan=\'x\'','PRAGMA query_only=OFF','ATTACH DATABASE \':memory:\' AS other','SELECT load_extension(\'x\')','SELECT writefile(\'x\',\'y\')','SELECT * FROM data; DELETE FROM files','SELECT randomblob(1000000000)','SELECT * FROM pragma_database_list'])assert.throws(()=>core.query(f.db,sql));check(true,'SQL mutations, pragmas, attachments, extra statements and unsafe functions denied');
+  check(f.rows('WITH a AS (SELECT * FROM data) SELECT COUNT(*) FROM a').rows.length===1,'read-only CTE supported');
+  check(f.rows('SELECT SUM(__amount_minor) AS total FROM data').columns[0]==='total','SQL result columns retained');
+  const large=fixture();large.put('large.xlsx',Array.from({length:20101},(_,i)=>['202401',String(i),'0.01','','测试']));const start=Date.now();await large.scan();console.log('BENCH 20101 rows scan ms='+String(Date.now()-start));
+  check(large.rows().rows.length===100,'page only sends 100 rows');const last=large.rows('SELECT * FROM data ORDER BY __loan',19900,100);check(last.rows.length===100&&!last.more&&last.capped,'20000 preview cap with explicit truncation');
+  const manager=new DatabaseManager(path.join(root,'manager'),()=>{},()=>{});await assert.rejects(manager.job('query',f.db,{sql:'WITH RECURSIVE x(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM x) SELECT sum(n) FROM x'}),/15/);check(true,'expensive query terminates at 15 seconds without blocking UI');
+  for(const file of fs.readdirSync(f.folder))fs.unlinkSync(path.join(f.folder,file));await assert.rejects(f.scan(),/没有报表/);check(f.rows().rows.length===2,'empty folder never erases saved database');
+  const empty=fixture();empty.put('empty.xlsx',[]);await empty.scan();check(empty.rows().rows.length===0,'header-only workbook removes all saved data rows');
+  const cancel=fixture();cancel.put('a.xlsx',[['202401','1','1','','old']]);await cancel.scan();cancel.put('a.xlsx',[['202401','1','2','','new']]);const cancelManager=new DatabaseManager(path.join(root,'cancel'),()=>new Promise(()=>{}),()=>{});const pending=cancelManager.job('scan',cancel.db);setTimeout(()=>cancelManager.cancel(),250);await assert.rejects(pending,/取消/);check(cancel.rows('SELECT __amount_minor FROM data').rows[0][0]===100,'canceled scan process releases lock and keeps prior committed data');await cancel.scan();check(cancel.rows('SELECT __amount_minor FROM data').rows[0][0]===200,'scan succeeds after cancellation');
+  console.log('PASS database suite '+count+' checks');
+})().catch(e=>{console.error(e);process.exitCode=1;}).finally(()=>{fs.rmSync(root,{recursive:true,force:true});});

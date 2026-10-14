@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Xml.Linq;
@@ -47,6 +47,7 @@ namespace SheetPilot.Excel
         [ExcelCommand(Name = "GridPilot_Text")] public static void Text() => Guard(() => Tools?.Execute("GridPilot_Text"));
         [ExcelCommand(Name = "GridPilot_Number")] public static void Number() => Guard(() => Tools?.Execute("GridPilot_Number"));
         [ExcelCommand(Name = "GridPilot_Segment")] public static void Segment() => Guard(() => Tools?.Execute("GridPilot_Segment"));
+        [ExcelCommand(Name = "GridPilot_Database")] public static void Database() => Guard(() => Tools?.Execute("GridPilot_Database"));
         [ExcelCommand(Name = "GridPilot_Mask")] public static void Mask() => Guard(() => Tools?.Execute("GridPilot_Mask"));
         [ExcelCommand(Name = "GridPilot_Undo")] public static void Undo() => Guard(() => Tools?.Execute("GridPilot_Undo"));
         [ExcelCommand(Name = "GridPilot_Settings")] public static void Settings() => Guard(() => Tools?.Execute("GridPilot_Settings"));

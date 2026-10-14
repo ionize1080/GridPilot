@@ -43,6 +43,7 @@ namespace SheetPilot.Excel
         public bool CanUndo => gateway.CanUndo;
         internal string PerformanceSummary => focus?.PerformanceSummary ?? "Focus not started";
         public IEnumerable<FeatureCommand> Commands => new[] {
+            new FeatureCommand("GridPilot_Database", "报表数据库", "文件夹报表归档、快照与累计去重、可视化和 SQL 查询；在源 Excel 修改后扫描更新。", "", () => Run(OpenDatabase)),
             new FeatureCommand("GridPilot_Mask", "数据脱敏", "选择字段、统一跨表映射；验证支持的公式关系后另存独立副本。", "", () => Run(OpenMask)),
             new FeatureCommand("GridPilot_Segment", "中英文分词", "离线分词、专业词表和三种输出；预览后生成新工作簿。", "", () => Run(()=>Show(new SegmentationWindow(navigation.Settings,gateway.CaptureTextSelection(),Path.Combine(Path.GetDirectoryName(ExcelDnaUtil.XllPath),"Resources"),gateway.WriteTextOutput)))),
             new FeatureCommand("GridPilot_CopyInternal", "原样复制·内部公式", "复制到新工作簿，保留排版和范围内公式；外部及无法确认依赖的公式按设置转为当前值或停止。Esc 可取消。", "", () => Run(() => CopySelection(true))),
@@ -83,7 +84,7 @@ namespace SheetPilot.Excel
                 lifetime.Token.ThrowIfCancellationRequested();
                 if(window.IsDisconnected)throw new OperationCanceledException();
                 string action=(string)message["action"];
-                if(action!="init" && action!="preview" && action!="export")throw new InvalidOperationException("未知操作。");
+                if(action!="init" && action!="preview" && action!="previewPage" && action!="copyMask" && action!="export")throw new InvalidOperationException("未知操作。");
                 if(busy)throw new InvalidOperationException("请等待当前操作完成。");
                 busy=true;operation?.Dispose();operation=CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);var token=operation.Token;
                 try
@@ -93,18 +94,21 @@ namespace SheetPilot.Excel
                         snapshot=gateway.CaptureMaskWorkbook(token,progress);
                         progress("识别字段与统计词频",0,0,snapshot.Cells.Count);
                         var suggested=await Task.Run(()=>MaskInference.Suggest(snapshot,token),token);
-                        return new {mode="mask",sheets=snapshot.Sheets.Select((s,i)=>new {id=i,name=s.Name,nonEmptyRows=s.NonEmptyRows,nonEmptyColumns=s.NonEmptyColumns}),cells=snapshot.Cells.Count,rules=suggested,settings};
+                        return new {mode="mask",sheets=snapshot.Sheets.Select((s,i)=>new {id=i,name=s.Name,nonEmptyRows=s.NonEmptyRows,nonEmptyColumns=s.NonEmptyColumns,rows=s.Rows,columns=s.Columns}),cells=snapshot.Cells.Count,rules=suggested,settings};
                     }
                     if(snapshot==null)throw new InvalidOperationException("请先完成工作簿扫描。");
                     var selected=message["rules"].ToObject<MaskRule[]>();bool mentions=(bool?)message["replaceMentions"]??settings.MaskReplaceMentions;string key=JsonConvert.SerializeObject(selected)+mentions;
-                    if(action=="export" && (preview==null || key!=fingerprint))throw new InvalidOperationException("字段规则已改变，请重新预览后导出。");
+                    if((action=="export" || action=="copyMask" || action=="previewPage") && (preview==null || key!=fingerprint))throw new InvalidOperationException("字段规则已改变，请重新预览后导出。");
                     if(preview==null || key!=fingerprint)
                     {preview=null;fingerprint=null;preview=await Task.Run(()=>MaskPlanner.Build(snapshot,selected,token,mentions,progress),token);fingerprint=key;}
                     token.ThrowIfCancellationRequested();
-                    if(action=="preview")
+                    if(action=="preview" || action=="previewPage")
+                        return await Task.Run(()=>MaskPreview.Page(snapshot,preview,(string)message["search"],(int?)message["offset"]??0,(int?)message["pageSize"]??100,token),token);
+                    if(action=="copyMask")
                     {
-                        var rows=preview.Output.Cells.Select((c,i)=>new {Cell=c,Before=snapshot.Cells[i].Value,After=c.Formula==null?c.Value:preview.Calculated[c.Key]}).Where(p=>!Equals(p.Before,p.After)).Take(60).Select(p=>new {location=p.Cell.Location,before=p.Before,after=p.After}).ToArray();
-                        return new {summary=preview.Summary,changed=preview.Changed,formulas=preview.Formulas,rows};
+                        if((bool?)message["confirmed"]!=true)throw new InvalidOperationException("请先确认预览和保留字段。");
+                        gateway.VerifyMaskSource(snapshot,token,progress);
+                        return await Task.Run(()=>MaskPreview.Clipboard(preview,(int?)message["sheet"]??0,(int?)message["firstRow"]??1,(int?)message["lastRow"]??1),token);
                     }
                     if((bool?)message["confirmed"]!=true)throw new InvalidOperationException("请先确认预览和保留字段。");
                     string path=(string)message["path"];if(string.IsNullOrWhiteSpace(path))throw new InvalidOperationException("请选择新的保存位置。");
@@ -114,6 +118,19 @@ namespace SheetPilot.Excel
                 finally{busy=false;}
             },()=>{try{operation?.Cancel();}catch(ObjectDisposedException){}});
             window.Disconnected+=()=>{lifetime.Cancel();};
+        }
+        private void OpenDatabase()
+        {
+            var lifetime=new CancellationTokenSource();
+            var window=OpenPortable(async message=>
+            {
+                string action=(string)message["action"];
+                if(action=="init")return new {mode="database"};
+                if(action=="dbReadFile")return await Task.Run(()=>ReportReader.Read((string)message["path"],(string)message["sheet"],(int?)message["maxRows"]??0,lifetime.Token),lifetime.Token);
+                if(action=="dbOpenSource")return gateway.OpenReportSource((string)message["path"],(string)message["sheet"],(int?)message["row"]??1);
+                throw new InvalidOperationException("未知数据库操作。");
+            });
+            window.Disconnected+=()=>lifetime.Cancel();
         }
         private void OpenSettings()
         {

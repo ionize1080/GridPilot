@@ -33,10 +33,11 @@ namespace SheetPilot.Excel
                 if (id.Contains("Refresh")) { g.DrawArc(pen, 5, 5, 22, 22, 40, 285); g.FillPolygon(accent, new[] { new Point(24, 3), new Point(29, 11), new Point(20, 11) }); }
                 else if (id.Contains("Focus")) { g.FillRectangle(faint, 2, 12, 28, 8); g.FillRectangle(faint, 12, 2, 8, 28); g.DrawRectangle(pen, 3, 3, 26, 26); g.DrawLine(pen, 3, 12, 29, 12); g.DrawLine(pen, 3, 20, 29, 20); g.DrawLine(pen, 12, 3, 12, 29); g.DrawLine(pen, 20, 3, 20, 29); g.FillRectangle(accent, 13, 13, 6, 6); }
                 else if (id.Contains("Rename")) { g.DrawRectangle(pen, 4, 3, 20, 25); g.DrawLine(pen, 8, 9, 19, 9); g.DrawLine(pen, 8, 14, 16, 14); g.FillPolygon(accent, new[] { new Point(13, 25), new Point(15, 19), new Point(25, 9), new Point(29, 13), new Point(19, 23) }); }
+                else if (id.Contains("Database")) {g.FillRectangle(faint,5,8,22,17);g.FillEllipse(faint,5,3,22,10);g.DrawEllipse(pen,5,3,22,10);g.DrawLine(pen,5,8,5,25);g.DrawLine(pen,27,8,27,25);g.DrawArc(pen,5,12,22,10,0,180);g.DrawArc(pen,5,20,22,10,0,180);g.FillEllipse(accent,20,23,8,8);}
                 else if (id.Contains("Mask")) { g.FillPolygon(faint,new[]{new Point(16,2),new Point(28,7),new Point(26,21),new Point(16,30),new Point(6,21),new Point(4,7)});g.DrawArc(pen,11,8,10,13,180,180);g.FillRectangle(accent,9,14,14,10);g.FillEllipse(Brushes.White,14,17,4,4); }
-                else if (id.Contains("Segment")) { g.DrawRectangle(pen,3,4,26,24);g.DrawLine(pen,16,5,16,27);using(var font=new Font("Segoe UI",12,FontStyle.Bold,GraphicsUnit.Pixel)){g.DrawString("A",font,accent,4,10);g.DrawString("B",font,accent,18,10);} }
-                else if (id.Contains("Copy")) { g.FillRectangle(faint, 3, 3, 18, 22); g.DrawRectangle(pen, 3, 3, 18, 22); g.FillRectangle(Brushes.White, 10, 9, 18, 21); g.DrawRectangle(pen, 10, 9, 18, 21); using (var font = new Font("Segoe UI", id.Contains("Internal") ? 12 : 10, FontStyle.Bold, GraphicsUnit.Pixel)) g.DrawString(id.Contains("Internal") ? "fx" : "123", font, accent, 11, 14); }
-                else if (id.Contains("Text") || id.Contains("Number")) { g.DrawRectangle(pen, 3, 3, 26, 26); g.FillPolygon(accent, new[] { new Point(4, 4), new Point(11, 4), new Point(4, 11) }); using (var font = new Font("Segoe UI", id.Contains("Text") ? 17 : 13, FontStyle.Bold, GraphicsUnit.Pixel)) using (var format = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center }) g.DrawString(id.Contains("Text") ? "A" : "12", font, accent, new RectangleF(3, 4, 26, 26), format); }
+                else if (id.Contains("Segment")) { g.DrawRectangle(pen,3,4,26,24);g.DrawLine(pen,16,5,16,27);DrawLabel(g,"中",accent,new RectangleF(5,8,9,16),11,"Microsoft YaHei");DrawLabel(g,"A",accent,new RectangleF(18,8,9,16),12); }
+                else if (id.Contains("Copy")) { g.FillRectangle(faint, 3, 3, 18, 22); g.DrawRectangle(pen, 3, 3, 18, 22); g.FillRectangle(Brushes.White, 10, 9, 18, 21); g.DrawRectangle(pen, 10, 9, 18, 21); DrawLabel(g,id.Contains("Internal")?"fx":"123",accent,new RectangleF(12,12,14,15),id.Contains("Internal")?12:10); }
+                else if (id.Contains("Text") || id.Contains("Number")) { g.DrawRectangle(pen, 3, 3, 26, 26); g.FillPolygon(accent, new[] { new Point(4, 4), new Point(11, 4), new Point(4, 11) }); DrawLabel(g,id.Contains("Text")?"A":"12",accent,new RectangleF(5,6,22,21),id.Contains("Text")?17:13); }
                 else if (id.Contains("Undo")) { g.DrawArc(pen, 7, 9, 20, 18, 200, 260); g.FillPolygon(accent, new[] { new Point(3, 13), new Point(12, 5), new Point(12, 20) }); }
                 else if (id.Contains("Settings")) { g.FillEllipse(faint, 6, 6, 20, 20); for (int i=0;i<8;i++) { double a = i*Math.PI/4; g.DrawLine(pen, 16+(float)Math.Cos(a)*10,16+(float)Math.Sin(a)*10,16+(float)Math.Cos(a)*14,16+(float)Math.Sin(a)*14); } g.DrawEllipse(pen, 7, 7, 18, 18); g.FillEllipse(accent, 12, 12, 8, 8); }
                 else { g.DrawRectangle(pen, 5, 3, 21, 26); g.DrawLine(pen, 10, 3, 10, 29); g.FillPolygon(accent, new[] { new Point(17, 3), new Point(23, 3), new Point(23, 17), new Point(20, 14), new Point(17, 17) }); g.DrawLine(pen, 14, 22, 22, 22); }
@@ -44,6 +45,17 @@ namespace SheetPilot.Excel
             var output=new Bitmap(size,size,PixelFormat.Format32bppArgb);
             using(var scaled=Graphics.FromImage(output)){scaled.InterpolationMode=InterpolationMode.HighQualityBicubic;scaled.PixelOffsetMode=PixelOffsetMode.HighQuality;scaled.DrawImage(image,new Rectangle(0,0,size,size));}
             image.Dispose();return output;
+        }
+        private static void DrawLabel(Graphics graphics,string text,Brush brush,RectangleF box,float size,string family="Segoe UI")
+        {
+            // Center the actual glyph outlines, not font side bearings or DrawString layout padding.
+            using(var font=new FontFamily(family))using(var glyph=new GraphicsPath())using(var matrix=new Matrix())
+            {
+                glyph.AddString(text,font,(int)FontStyle.Bold,size,PointF.Empty,StringFormat.GenericTypographic);
+                var bounds=glyph.GetBounds();float scale=Math.Min(1,Math.Min(box.Width/bounds.Width,box.Height/bounds.Height));
+                matrix.Translate(-bounds.X,-bounds.Y);matrix.Scale(scale,scale,MatrixOrder.Append);
+                matrix.Translate(box.X+(box.Width-bounds.Width*scale)/2,box.Y+(box.Height-bounds.Height*scale)/2,MatrixOrder.Append);glyph.Transform(matrix);graphics.FillPath(brush,glyph);
+            }
         }
         public static void Release() { foreach (var image in cache.Values) image.Dispose(); cache.Clear(); }
         [DllImport("user32.dll")] private static extern uint GetDpiForWindow(IntPtr hwnd);

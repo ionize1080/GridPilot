@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
@@ -23,7 +23,11 @@ internal static partial class Program
         try
         {
             if(args.Length==0 && Path.GetFileNameWithoutExtension(System.Reflection.Assembly.GetExecutingAssembly().Location).Contains("Compatibility")) return CompatibilityRunner();
+            if(args.Length>0&&args[0]=="--report-json"){Console.OutputEncoding=new System.Text.UTF8Encoding(false);Console.WriteLine(Newtonsoft.Json.JsonConvert.SerializeObject(ReportReader.Read(args[1],args.Length>2?args[2]:null,0,CancellationToken.None)));return 0;}
             Console.WriteLine("Test process: " + (Environment.Is64BitProcess ? "x64" : "x86"));
+            if(args.Length>1&&args[0]=="--v11-launch"){V11Launch(Path.GetFullPath(args[1]));Console.WriteLine("PASS "+checks+" assertions");return 0;}
+            if(args.Length>0 && args[0]=="--v11"){V11Tests(args.Contains("--excel"));Console.WriteLine("PASS "+checks+" assertions");return 0;}
+            if(args.Length>0 && args[0]=="--report-schema"){var data=Newtonsoft.Json.Linq.JObject.FromObject(ReportReader.Read(args[1],"Page1_1",0,CancellationToken.None));Console.WriteLine("Report rows="+data["rows"].Count()+" sheets="+data["sheets"].Count());return 0;}
             if(args.Length>0 && args[0]=="--v1"){V1CoreTests();if(args.Contains("--excel"))V1ExcelTests(args.Contains("--large"));Console.WriteLine("PASS "+checks+" assertions");return 0;}
             if(args.Length>2 && args[0]=="--release-ui") {ReleaseUiSmoke(Path.GetFullPath(args[1]),Path.GetFullPath(args[2]));return 0;}
             if(args.Length>0 && args[0]=="--release-features") { ReleaseFeatureTests(); if(args.Length>1 && args[1]=="--excel") ReleaseFeatureExcelTests(); Console.WriteLine("PASS "+checks+" assertions");return 0; }

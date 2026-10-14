@@ -39,6 +39,8 @@ namespace SheetPilot.UI
         public event Action<bool> ScopeChanged;
         public event Action RefreshRequested;
         public event Action<SheetItem> NavigateRequested;
+        public event Action<SheetEdit> EditRequested;
+        public void Edit(SheetEdit request){if(!disposed&&!searchPending)EditRequested?.Invoke(request);}
         public string Query { get => query; set { if (Set(ref query, value)) ScheduleSearch(); } }
         public bool UseRegex { get => Settings.UseRegex; set => Settings.UseRegex = value; }
         public bool MatchCase { get => Settings.MatchCase; set => Settings.MatchCase = value; }

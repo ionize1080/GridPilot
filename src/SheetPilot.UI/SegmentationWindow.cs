@@ -35,6 +35,14 @@ namespace SheetPilot.UI
             grid.Columns.Add(new DataGridTextColumn { Header="位置",Binding=new System.Windows.Data.Binding("Source.Address"),Width=90 });
             grid.Columns.Add(new DataGridTextColumn { Header="原文",Binding=new System.Windows.Data.Binding("Source.Text"),MinWidth=180,Width=new DataGridLength(1,DataGridLengthUnitType.Star) });
             grid.Columns.Add(new DataGridTextColumn { Header="分词结果",Binding=new System.Windows.Data.Binding("Preview"),MinWidth=300,Width=new DataGridLength(2,DataGridLengthUnitType.Star) }); root.Children.Add(grid);
+            TextOutput[] previewRows=new TextOutput[0];int page=0;const int pageSize=100;
+            var paging=new StackPanel{Orientation=Orientation.Horizontal};bottom.Children.Insert(0,paging);
+            var search=new TextBox{Width=230,Margin=new Thickness(0,4,8,4),ToolTip="搜索位置、原文或分词结果"};paging.Children.Add(search);
+            var pageInfo=new TextBlock{VerticalAlignment=VerticalAlignment.Center,Margin=new Thickness(8,0,8,0)};
+            Button previous=null,next=null;Action refreshPage=()=>{};
+            refreshPage=()=>{string query=search.Text;var matching=previewRows.Where(r=>query.Length==0||(r.Source.Address+" "+r.Source.Text+" "+r.Preview).IndexOf(query,StringComparison.OrdinalIgnoreCase)>=0).ToArray();page=Math.Min(page,Math.Max(0,(matching.Length-1)/pageSize));grid.ItemsSource=matching.Skip(page*pageSize).Take(pageSize).ToArray();pageInfo.Text=(matching.Length==0?0:page+1)+" / "+Math.Max(1,(matching.Length+pageSize-1)/pageSize)+" 页 · "+matching.Length+" 条";previous.IsEnabled=page>0;next.IsEnabled=(page+1)*pageSize<matching.Length;};
+            previous=ToolUi.Button(paging,"上一页",()=>{page--;refreshPage();});paging.Children.Add(pageInfo);next=ToolUi.Button(paging,"下一页",()=>{page++;refreshPage();});
+            var debounce=new System.Windows.Threading.DispatcherTimer{Interval=TimeSpan.FromMilliseconds(180)};debounce.Tick+=(s,e)=>{debounce.Stop();page=0;refreshPage();};search.TextChanged+=(s,e)=>{debounce.Stop();debounce.Start();};Closed+=(s,e)=>debounce.Stop();refreshPage();
             Button preview=null,execute=null;
             Func<bool,Task> run=async export=>
             {
@@ -43,8 +51,8 @@ namespace SheetPilot.UI
                 try
                 {
                     options.Terms=terms.Text; status.Text="正在分词，可取消…";
-                    var rows=await Task.Run(()=> { var segmenter=new TextSegmenter(resources); var result=new List<TextOutput>();var budget=new TextOutputBudget(options,export?input.Count:Math.Min(30,input.Count)); foreach(var item in (export?input:input.Take(30))) { token.ThrowIfCancellationRequested(); budget.BeginRow();result.Add(new TextOutput { Source=item,Words=segmenter.Split(item.Text,options,token,budget.Accept) }); } return result; });
-                    token.ThrowIfCancellationRequested(); grid.ItemsSource=rows.Take(30).ToArray();
+                    var rows=await Task.Run(()=> { var segmenter=new TextSegmenter(resources); var result=new List<TextOutput>();var budget=new TextOutputBudget(options,export?input.Count:Math.Min(20000,input.Count)); foreach(var item in (export?input:input.Take(20000))) { token.ThrowIfCancellationRequested(); budget.BeginRow();result.Add(new TextOutput { Source=item,Words=segmenter.Split(item.Text,options,token,budget.Accept) }); } return result; });
+                    token.ThrowIfCancellationRequested(); previewRows=rows.Take(20000).ToArray();page=0;refreshPage();
                     if(export) { var values=TextBatch.Layout(rows,options); output(values); status.Text="完成："+rows.Count+" 条文本，结果已写入新工作簿。";_ = Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background,new Action(Close)); }
                     else status.Text="已预览前 "+rows.Count+" 条；生成结果时处理全部 "+input.Count+" 条。";
                 }

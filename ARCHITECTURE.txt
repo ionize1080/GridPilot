@@ -1,4 +1,16 @@
-﻿v0.9 architecture (supersedes the historical decisions below)
+v1.1 additions (supersede older notes where different)
+- Electron now hosts report databases as well as masking/settings. Native navigation remains virtualized WPF.
+- Per-library SQLite at %APPDATA%/GridPilot/Databases; registry metadata is stored in each library config.
+- ReportReader reads cached OOXML values on a background task, with no Excel automation during scanning.
+- Dedicated child processes handle database queries and scan transactions. Killing a canceled/timed-out
+  child reliably releases SQLite native work and locks; a worker-thread termination alone does not.
+- Source contributions and canonical records are separate. SHA-256 scan, schema validation and a complete
+  transaction preserve previous committed data on failure. See DATABASE.txt and docs/v1.1/DESIGN.md.
+- Query connections are read-only with SQLite authorizer; unsafe functions/PRAGMA/ATTACH/writes are denied.
+- Mask preview is paged (20k cap), clipboard writes text/HTML ClipboardItems after source verification.
+- Clean portable packages bundle notices as App/legal.bin, readable from Settings > About.
+
+v0.9 architecture (supersedes the historical decisions below)
 - Excel-DNA net462 XLL shim (~0.63/0.70 MiB), external managed assemblies.
 - Browser/Electron 44.7.0 win-x64 starts only on masking/settings, exits with its window.
 - App local HTML/CSS/JS; sandbox=true, contextIsolation=true, nodeIntegration=false.
