@@ -10,10 +10,14 @@ namespace SheetPilot.Excel
     public sealed partial class ExcelGateway
     {
         private Func<string> undo;
+        private ExcelEvents undoEvents;
+        private bool undoInvalidated;
+        public void ReleaseUndoEvents(){undoEvents?.Dispose();undoEvents=null;undo=null;}
+        private void WatchUndo(){if(undoEvents==null){undoEvents=new ExcelEvents(application());undoEvents.Change(()=>{if(undo!=null)undoInvalidated=true;undo=null;});}}
         public bool CanUndo => undo != null;
         public string UndoLast()
         {
-            CheckThread(); if (undo == null) return "没有可撤销的 GridPilot 操作。";
+            CheckThread(); if (undo == null) {if(undoInvalidated)throw new InvalidOperationException("工作表已发生外部编辑，上次撤销已失效。");return "没有可撤销的 GridPilot 操作。";}
             var operation = undo; string result = operation(); undo = null; return result;
         }
         private object FindBook(string key)
@@ -72,7 +76,7 @@ namespace SheetPilot.Excel
             if (remember)
             {
                 var reverse = changed.Select(p => new RenameEntry(new SheetItem(p.Source.Key, p.NewName, p.Source.Index, p.Source.Visibility, p.Source.IsActive, p.Source.Kind, p.Source.WorkbookKey, p.Source.WorkbookName), true, p.Source.Name)).ToArray();
-                undo = () => ApplyRename(reverse, false);
+                undoInvalidated=false;undo = () => ApplyRename(reverse, false);
             }
             return "已重命名 " + changed.Length + " 个页面。可通过「撤销上次操作」恢复；未自动保存工作簿。";
         }
@@ -85,7 +89,7 @@ namespace SheetPilot.Excel
         }
         public string ConvertSelection(bool toText, ToolPreferences options)
         {
-            CheckThread(); options.Normalize();
+            CheckThread(); options.Normalize();WatchUndo();
             dynamic app = application(), selection = app.Selection;
             if (selection == null || Microsoft.VisualBasic.Information.TypeName((object)selection).TrimStart('_') != "Range") throw new InvalidOperationException("请先选中单元格区域。");
             dynamic sheet = selection.Worksheet, book = sheet.Parent;
@@ -132,7 +136,12 @@ namespace SheetPilot.Excel
                 changes.Add(new CellChange { BeforeAlignment = alignment, AfterAlignment = afterAlignment, Book = bookKey, Sheet = sheetKey, Address = (string)cell.Address, Before = before, After = after, IgnoreBefore = ignore });
             }
             }
-            if (changes.Count > 0) { WriteCells(changes, false, options.NumberAsTextHint); undo = () => { WriteCells(changes, true, false); return "已恢复 " + changes.Count + " 个单元格的内容。"; }; }
+            if (changes.Count > 0)
+            {
+                WriteCells(changes,false,options.NumberAsTextHint);undoInvalidated=false;
+                if(!(bool)app.EnableEvents){undo=null;undoInvalidated=true;}
+                else undo=()=>{WriteCells(changes,true,false);return "已恢复 "+changes.Count+" 个单元格的内容。";};
+            }
             string details = skipped.Count == 0 ? "" : "；跳过 " + string.Join("、", skipped.Select(p => p.Key + " " + p.Value));
             return "已" + (toText ? "转为文本 " : "转为数值 ") + changes.Count + " 个单元格" + details + (options.PreserveVisualAlignment ? "。保留视觉对齐与其他格式，公式保持不变。" : "。公式与格式属性保持不变。");
         }
@@ -141,10 +150,14 @@ namespace SheetPilot.Excel
         private void WriteCells(IReadOnlyList<CellChange> changes, bool reverse, bool hints)
         {
             var targets = new List<object>();
+            var sheets=new Dictionary<string,object>(StringComparer.Ordinal);
             foreach (var change in changes)
             {
-                dynamic book = FindBook(change.Book), sheet = FindPage(book, change.Sheet), cell = sheet.Range[change.Address];
-                if ((bool)book.ReadOnly || ((bool)sheet.ProtectContents && (bool)cell.Locked) || (bool)cell.HasFormula || !Equals((object)cell.Value2, reverse ? change.After : change.Before) || (change.AlignmentChanged && (int)cell.HorizontalAlignment != (reverse ? change.AfterAlignment : change.BeforeAlignment)))
+                string key=change.Book+"|"+change.Sheet;
+                if(!sheets.TryGetValue(key,out var target))
+                {dynamic foundBook=FindBook(change.Book);if((bool)foundBook.ReadOnly)throw new InvalidOperationException("目标工作簿只读。");target=FindPage(foundBook,change.Sheet);sheets.Add(key,target);}
+                dynamic sheet=target,cell=sheet.Range[change.Address];
+                if (((bool)sheet.ProtectContents && (bool)cell.Locked) || (bool)cell.HasFormula || !Equals((object)cell.Value2, reverse ? change.After : change.Before) || (change.AlignmentChanged && (int)cell.HorizontalAlignment != (reverse ? change.AfterAlignment : change.BeforeAlignment)))
                     throw new InvalidOperationException("目标内容或保护状态已改变，未写入；请重新选择范围。");
                 targets.Add((object)cell);
             }

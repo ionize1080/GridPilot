@@ -18,15 +18,15 @@ const pipeName=process.argv.find(v=>v.startsWith('--gridpilot-pipe='))?.slice('-
 if(!pipeName || !/^GridPilot-[a-f0-9]{32}$/.test(pipeName)){app.quit();throw new Error('GridPilot must be opened from Excel.');}
 const connection=net.createConnection('\\\\.\\pipe\\'+pipeName);
 const input=readline.createInterface({input:connection});
-input.on('line',line=>{try{const message=JSON.parse(line),slot=pending.get(message.id);if(slot){pending.delete(message.id);message.error?slot.reject(new Error(message.error)):slot.resolve(message.data);}}catch{}});
+input.on('line',line=>{try{const message=JSON.parse(line);if(message.type==='progress'){win?.webContents.send('progress',message);return;}const slot=pending.get(message.id);if(slot){pending.delete(message.id);message.error?slot.reject(new Error(message.error)):slot.resolve(message.data);}}catch{}});
 input.on('close',()=>app.quit());
 connection.on('error',()=>app.quit());
 const file=pathToFileURL(path.join(__dirname,'index.html')).href;
 ipcMain.handle('request',async(event,message)=>{
   if(event.sender!==win?.webContents || event.senderFrame.url!==file)throw new Error('Invalid sender');
   if(!message || !['init','preview','export','cancel','saveSettings','navigationSettings'].includes(message.action))throw new Error('Invalid action');
-  if(JSON.stringify(message).length>4*1024*1024)throw new Error('请求过大');
-  if(message.action==='export'){const choice=await dialog.showSaveDialog(win,{title:'保存脱敏副本',defaultPath:'GridPilot-masked.xlsx',filters:[{name:'Excel 工作簿',extensions:['xlsx']}],properties:['showOverwriteConfirmation']});if(choice.canceled)return {message:'已取消保存，预览仍保留。'};message={...message,path:choice.filePath};}
+  if(JSON.stringify(message).length>32*1024*1024)throw new Error('请求过大');
+  if(message.action==='export'){const choice=await dialog.showSaveDialog(win,{title:'保存脱敏副本',defaultPath:'GridPilot-masked.xlsx',filters:[{name:'Excel 工作簿',extensions:['xlsx']}],properties:['showOverwriteConfirmation']});if(choice.canceled)return {canceled:true,message:'已取消保存，预览仍保留。'};message={...message,path:choice.filePath};}
   return new Promise((resolve,reject)=>{const id=++sequence;pending.set(id,{resolve,reject});connection.write(JSON.stringify({...message,id})+'\n');});
 });
 ipcMain.on('close',event=>{if(event.sender===win?.webContents)win.close();});

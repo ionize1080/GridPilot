@@ -21,7 +21,7 @@ namespace SheetPilot.Core
             {
                 if((i&255)==0)token.ThrowIfCancellationRequested();var node=root;string value=null;int end=i;
                 for(int j=i;j<text.Length && node.Next.TryGetValue(char.ToUpperInvariant(text[j]),out node);j++)
-                    if(node.Replacement!=null){value=node.Replacement;end=j;}
+                { if((j&255)==0)token.ThrowIfCancellationRequested();if(node.Replacement!=null){value=node.Replacement;end=j;} }
                 if(value==null){output?.Append(text[i]);continue;}
                 if(!replace)return "match";found=true;output.Append(value);i=end;
             }

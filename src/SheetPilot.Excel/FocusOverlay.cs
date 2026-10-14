@@ -15,6 +15,7 @@ namespace SheetPilot.Excel
         public RippleBand[] Ripple { get; set; } = new RippleBand[0];
         public Rectangle Viewport { get; set; }
         public Rectangle[] Bands { get; set; } = new Rectangle[0];
+        public Rectangle[] RipplePanes { get; set; } = new Rectangle[0];
         public Rectangle[] Panes { get; set; } = new Rectangle[0];
         public Rectangle[] Cells { get; set; } = new Rectangle[0];
     }
@@ -23,6 +24,8 @@ namespace SheetPilot.Excel
         private readonly Func<object> application;
         private readonly ToolPreferences settings;
         private readonly Timer timer = new Timer();
+        private readonly Control eventDispatcher = new Control();
+        private readonly int timerThread = System.Threading.Thread.CurrentThread.ManagedThreadId;
         private readonly ExcelEvents events;
         private readonly uint processId;
         private readonly Dictionary<Rectangle, Rectangle> edges = new Dictionary<Rectangle, Rectangle>();
@@ -35,6 +38,10 @@ namespace SheetPilot.Excel
         private readonly System.Diagnostics.Stopwatch animation = new System.Diagnostics.Stopwatch();
         private string layout;
         private int lastSelection;
+        private bool highResolution;
+        private double frameCost;
+        private readonly System.Diagnostics.Stopwatch frameClock=System.Diagnostics.Stopwatch.StartNew();
+        private double lastFrame;
         private readonly System.Diagnostics.Stopwatch ripple=new System.Diagnostics.Stopwatch();
         public int PresentCount { get; private set; }
         public int ShowCount { get; private set; }
@@ -48,19 +55,24 @@ namespace SheetPilot.Excel
         }
         public bool Enabled { get; private set; }
         public bool IsVisible => layer?.Visible == true;
+        internal string AnimationDiagnostics => "timer="+timer.Enabled+" interval="+timer.Interval+" glide="+animation.IsRunning+":"+animation.ElapsedMilliseconds+" ripple="+ripple.IsRunning+":"+ripple.ElapsedMilliseconds+" visible="+IsVisible+" updating="+updating+" ticks="+pulseTicks+" renders="+renderCount;
+        private int pulseTicks,renderCount;
         internal bool IsAnimating => animation.IsRunning || ripple.IsRunning;
         internal IntPtr OwnerHandle => owner;
         public FocusOverlay(Func<object> application, Action<Action> queue, ToolPreferences settings)
         {
-            this.application = application; this.settings = settings; timer.Interval = 16; timer.Tick += (s,e) => Pulse(false);
+            this.application = application; this.settings = settings; var dispatcherHandle=eventDispatcher.Handle; timer.Interval = 16; timer.Tick += (s,e) => Pulse(false);
             GetWindowThreadProcessId(ActiveWindowHandle(application()), out processId);
             events = new ExcelEvents(application());
-            try { events.Selection(() => Pulse(true)); events.Activation(() => { motion = null; edges.Clear(); Pulse(true); }); }
+            try { events.Selection(() => DispatchEvent(() => Pulse(true))); events.Activation(() => DispatchEvent(() => { motion = null; edges.Clear(); Pulse(true); })); }
             catch (COMException) { /* The lightweight timer remains a fallback on restricted hosts. */ }
         }
+        private void DispatchEvent(Action action)
+        { if(disposed)return; if(eventDispatcher.InvokeRequired)eventDispatcher.BeginInvoke(new Action(()=>{if(!disposed)action();}));else action(); }
         public void Toggle() { Enabled = !Enabled; if (Enabled) { timer.Start(); Pulse(true); } else { timer.Stop(); HideLayer(); } }
         private void Pulse(bool immediate)
         {
+            pulseTicks++;
             if (disposed || !Enabled || updating) return;
             updating = true;
             try
@@ -73,8 +85,11 @@ namespace SheetPilot.Excel
                     // An SDI workbook in the same Excel instance must be allowed to acquire a new owner.
                     if(foreground==owner || activeProcess!=processId || ClassName(foreground)!="XLMAIN") return;
                 }
-                if (!immediate && animation.IsRunning) Animate();
-                else if(!immediate && ripple.IsRunning) AnimateRipple();
+                if (!immediate && frameClock.Elapsed.TotalMilliseconds-lastFrame<timer.Interval-1 && IsAnimating)return;
+                // Animation frames use captured geometry only. Polling Excel through COM here can
+                // reenter a selection event while Office is waiting on this STA.
+                if (!immediate && animation.IsRunning) {Animate();return;}
+                if(!immediate && ripple.IsRunning) {AnimateRipple();return;}
                 int interval = unchecked(Environment.TickCount-lastMotion)>250 ? 100 : Math.Max(16, Math.Min(100, settings.FocusInterval));
                 if (!immediate && IsVisible && unchecked(Environment.TickCount-lastPoll)<interval) return;
                 lastPoll=Environment.TickCount;
@@ -84,7 +99,7 @@ namespace SheetPilot.Excel
             // the independent native guard still hides menus, editing, dialogs and background windows.
             catch (COMException) { motion = null; }
             catch { HideLayer(); motion = null; }
-            finally { updating = false; }
+            finally { SetAnimationClock(IsAnimating);updating = false; }
         }
         private void Update(bool immediate)
         {
@@ -95,8 +110,9 @@ namespace SheetPilot.Excel
             dynamic window = app.ActiveWindow;
             GetClientRect(hwnd, out Rect bounds);
             var origin = new Point(); ClientToScreen(hwnd, ref origin);
-            string nextLayout = hwnd + "|" + origin + "|" + bounds.Right + ":" + bounds.Bottom + "|" + window.ScrollRow + ":" + window.ScrollColumn + ":" + window.Zoom + ":" + window.View + ":" + window.SplitRow + ":" + window.SplitColumn + ":" + window.FreezePanes + "|" + app.ActiveSheet.Name;
-            string nextMotion = nextLayout + "|" + app.ActiveCell.Address + "|" + app.ActiveCell.Width + ":" + app.ActiveCell.Height + "|" + settings.FocusColor + settings.FocusOpacity + settings.FocusRow + settings.FocusColumn + settings.ClearActiveCell + settings.FocusAnimation;
+            Rectangle gridBounds=GridBounds(hwnd);dynamic activeArea=app.ActiveCell.MergeArea;
+            string nextLayout = gridBounds+"|"+hwnd + "|" + origin + "|" + bounds.Right + ":" + bounds.Bottom + "|" + window.ScrollRow + ":" + window.ScrollColumn + ":" + window.Zoom + ":" + window.View + ":" + window.SplitRow + ":" + window.SplitColumn + ":" + window.FreezePanes + "|" + app.ActiveSheet.Name;
+            string nextMotion = nextLayout + "|" + activeArea.Address + "|" + activeArea.Left+":"+activeArea.Top+":"+activeArea.Width + ":" + activeArea.Height + "|" + settings.FocusColor + settings.FocusOpacity + settings.FocusRow + settings.FocusColumn + settings.ClearActiveCell + settings.FocusAnimation+settings.FocusRipple+settings.RippleDuration+settings.RippleWidth+settings.RippleStrength;
             if (motion == nextMotion && IsVisible) return;
             lastMotion=Environment.TickCount;
             if (edges.Count > 64 || owner != hwnd) edges.Clear();
@@ -116,7 +132,8 @@ namespace SheetPilot.Excel
                 animation.Reset();
                 if (immediate && settings.FocusRipple && AnimationAllowed(true) && unchecked(Environment.TickCount-lastSelection)>90)ripple.Restart();else ripple.Reset();
                 if (glide && !ripple.IsRunning) { animation.Start(); Animate(); }
-                else Present(frame);
+                else Present(ripple.IsRunning?RippleFrame(frame,0,settings):frame);
+                SetAnimationClock(IsAnimating);
                 signature = next; PresentCount++;
             }
             layout = nextLayout;
@@ -132,7 +149,18 @@ namespace SheetPilot.Excel
                 SystemParametersInfo(0x1042, 0, ref enabled, 0) && enabled;
         }
         private void Present(FocusFrame frame)
-        { layer.Present(frame, ColorTranslator.FromHtml(settings.FocusColor), settings.FocusOpacity); displayed = frame; }
+        { renderCount++;var watch=System.Diagnostics.Stopwatch.StartNew();layer.Present(frame, ColorTranslator.FromHtml(settings.FocusColor), settings.FocusOpacity);displayed=frame;frameCost=frameCost*.8+watch.Elapsed.TotalMilliseconds*.2;lastFrame=frameClock.Elapsed.TotalMilliseconds; }
+        private void SetAnimationClock(bool active)
+        {
+            if(active!=highResolution){if(active)highResolution=timeBeginPeriod(1)==0;else{timeEndPeriod(1);highResolution=false;}}
+            // Out-of-process COM event callbacks may run on another managed thread.
+            // Restarting a WinForms timer there posts a delayed stop to its owning thread.
+            // Apply cadence changes only on the thread that created the timer.
+            if(System.Threading.Thread.CurrentThread.ManagedThreadId==timerThread)
+            { int interval=active?(frameCost<5?8:frameCost<11?16:32):33;if(timer.Interval!=interval)timer.Interval=interval; }
+        }
+        [DllImport("winmm.dll")] private static extern uint timeBeginPeriod(uint period);
+        [DllImport("winmm.dll")] private static extern uint timeEndPeriod(uint period);
         private void Animate()
         {
             double progress = Math.Min(1, animation.Elapsed.TotalMilliseconds / 120.0);
@@ -150,27 +178,35 @@ namespace SheetPilot.Excel
         public static FocusFrame RippleFrame(FocusFrame frame,double progress,ToolPreferences options)
         {
             if(frame==null || progress>=1)return frame;
-            var stripes=new List<RippleBand>();double distance=1-Math.Pow(1-Math.Max(0,progress),2);
-            int width=options.RippleWidth;double fade=Math.Pow(1-progress,1.3);
+            progress=Math.Max(0,progress);
+            var stripes=new List<RippleBand>();double fade=1-Math.Pow(progress,3);
+            double width=options.RippleWidth;
             for(int i=0;i<frame.Cells.Length;i++)
             {
-                var cell=frame.Cells[i];var pane=frame.Panes[i];
+                var cell=frame.Cells[i];var pane=frame.RipplePanes.Length==frame.Cells.Length?frame.RipplePanes[i]:frame.Panes[i];
                 if(!pane.IntersectsWith(cell))continue;
                 int cx=cell.Left+cell.Width/2,cy=cell.Top+cell.Height/2;
-                for(int trail=0;trail<8;trail++)
+                double extent=Math.Max(Math.Max(cx-pane.Left,pane.Right-cx),Math.Max(cy-pane.Top,pane.Bottom-cy));
+                // Start outside the active cell. Travel beyond the outer heading edge before fading out.
+                double radius=Math.Max(cell.Width,cell.Height)*.5+width*.55+progress*(extent+width*2);
+                const int samples=28;int thickness=Math.Max(1,(int)Math.Ceiling(width*2/samples));
+                for(int sample=0;sample<samples;sample++)
                 {
-                    int bandWidth=Math.Max(1,width/8),alpha=(int)(options.RippleStrength*fade*Math.Sin((trail+1)*Math.PI/9));
-                    if(alpha<=0)continue;
-                    foreach(int direction in new[]{-1,1})
+                    double offset=(sample/(double)(samples-1)-.5)*width*2;
+                    // Damped capillary crest / trough / secondary crest instead of opaque sliding bars.
+                    double wave=Math.Cos(offset/width*Math.PI*2)*Math.Exp(-3*offset*offset/(width*width));
+                    int alpha=(int)(options.RippleStrength*fade*wave);if(alpha==0)continue;
+                    foreach(int direction in new[]{-1,1})for(int lane=0;lane<3;lane++)
                     {
+                        double curve=lane==1?0:width*.12;
                         if(options.FocusRow)
-                        {int edge=direction<0?pane.Left:pane.Right;int x=cx+(int)((edge-cx)*distance)-direction*trail*bandWidth;var rect=Rectangle.Intersect(pane,new Rectangle(x,cell.Top,bandWidth,cell.Height));AddRipple(stripes,rect,cell,alpha);}
+                        {int y0=cell.Top+cell.Height*lane/3,y1=cell.Top+cell.Height*(lane+1)/3;int x=cx+(int)(direction*(radius+offset-curve));AddRipple(stripes,Rectangle.Intersect(pane,new Rectangle(x,y0,thickness,y1-y0)),cell,alpha);}
                         if(options.FocusColumn)
-                        {int edge=direction<0?pane.Top:pane.Bottom;int y=cy+(int)((edge-cy)*distance)-direction*trail*bandWidth;var rect=Rectangle.Intersect(pane,new Rectangle(cell.Left,y,cell.Width,bandWidth));AddRipple(stripes,rect,cell,alpha);}
+                        {int x0=cell.Left+cell.Width*lane/3,x1=cell.Left+cell.Width*(lane+1)/3;int y=cy+(int)(direction*(radius+offset-curve));AddRipple(stripes,Rectangle.Intersect(pane,new Rectangle(x0,y,x1-x0,thickness)),cell,alpha);}
                     }
                 }
             }
-            return new FocusFrame {Viewport=frame.Viewport,Cells=frame.Cells,Panes=frame.Panes,Bands=frame.Bands,Ripple=stripes.ToArray()};
+            return new FocusFrame {Viewport=frame.Viewport,Cells=frame.Cells,Panes=frame.Panes,RipplePanes=frame.RipplePanes,Bands=frame.Bands,Ripple=stripes.ToArray()};
         }
         private static void AddRipple(List<RippleBand> output,Rectangle rect,Rectangle cell,int opacity)
         {var bands=new List<Rectangle>();AddClippedBand(bands,rect,cell,true);foreach(var band in bands)output.Add(new RippleBand {Bounds=band,Opacity=opacity});}
@@ -253,7 +289,9 @@ namespace SheetPilot.Excel
                     if (settings.ClearActiveCell) Add(bands, Rectangle.FromLTRB(column.Left, Math.Max(column.Top, active.Bottom), column.Right, column.Bottom));
                 }
             }
-            return new FocusFrame { Viewport = grid, Bands = bands.ToArray(), Panes=clippedPanes.ToArray(), Cells=regions.Select(p=>p.Item2).ToArray() };
+            int leftEdge=clippedPanes.Where(p=>p.Width>0).Select(p=>p.Left).DefaultIfEmpty(grid.Left).Min(),topEdge=clippedPanes.Where(p=>p.Height>0).Select(p=>p.Top).DefaultIfEmpty(grid.Top).Min();
+            var ripplePanes=clippedPanes.Select(p=>Rectangle.FromLTRB(p.Left==leftEdge?grid.Left:p.Left,p.Top==topEdge?grid.Top:p.Top,p.Right,p.Bottom)).ToArray();
+            return new FocusFrame { Viewport = grid, Bands = bands.ToArray(), Panes=clippedPanes.ToArray(),RipplePanes=ripplePanes, Cells=regions.Select(p=>p.Item2).ToArray() };
         }
         internal static IntPtr ActiveWindowHandle(dynamic app)
         {
@@ -295,13 +333,13 @@ namespace SheetPilot.Excel
         }
         private static Rectangle GridBounds(IntPtr owner)
         {
-            Rectangle result = Rectangle.Empty;
-            EnumChildWindows(owner, (handle, p) => { var name = new StringBuilder(64); GetClassName(handle, name, name.Capacity); if (name.ToString() == "EXCEL7" && IsWindowVisible(handle)) { GetClientRect(handle, out Rect r); var point = new Point(r.Left, r.Top); ClientToScreen(handle, ref point); var candidate = new Rectangle(point.X, point.Y, r.Right-r.Left, r.Bottom-r.Top); if ((long)candidate.Width*candidate.Height > (long)result.Width*result.Height) result = candidate; } return true; }, IntPtr.Zero);
-            return result;
+            IntPtr grid=WorksheetFocus.FindGrid(owner);if(grid==IntPtr.Zero)return Rectangle.Empty;
+            GetClientRect(grid,out Rect r);var point=new Point(r.Left,r.Top);ClientToScreen(grid,ref point);return new Rectangle(point.X,point.Y,r.Right-r.Left,r.Bottom-r.Top);
         }
-        public void Dispose() { if (disposed) return; disposed = true; Enabled = false; events.Dispose(); timer.Dispose(); layer?.Dispose(); }
+
+        public void Dispose() { if (disposed) return; disposed = true; Enabled = false;SetAnimationClock(false); events.Dispose(); timer.Dispose(); layer?.Dispose(); eventDispatcher.Dispose(); }
         private sealed class Owner : IWin32Window { public Owner(IntPtr handle) { Handle = handle; } public IntPtr Handle { get; } }
-        private void HideLayer() { animation.Reset(); ripple.Reset(); displayed=null; layout=null; signature=null; motion=null; if (IsVisible) { layer.Hide(); HideCount++; } }
+        private void HideLayer() {SetAnimationClock(false); animation.Reset(); ripple.Reset(); displayed=null; layout=null; signature=null; motion=null; if (IsVisible) { layer.Hide(); HideCount++; } }
         internal static bool WorksheetExposed(IntPtr hwnd)
         {
             if (GetForegroundWindow()!=hwnd || IsIconic(hwnd) || !IsWindowEnabled(hwnd)) return false;
@@ -364,7 +402,7 @@ namespace SheetPilot.Excel
                 foreach(var band in previousBands) Fill(band,colorRow);
                 var dirty=previousBands.ToList();
                 foreach(var band in frame.Ripple)
-                {var bounds=new Rectangle(band.Bounds.X-frame.Viewport.X,band.Bounds.Y-frame.Viewport.Y,band.Bounds.Width,band.Bounds.Height);int value=Premultiplied(color,Math.Min(85,opacity+band.Opacity));for(int x=0;x<bounds.Width;x++)rippleRow[x]=value;Fill(bounds,rippleRow);dirty.Add(bounds);}
+                {var bounds=new Rectangle(band.Bounds.X-frame.Viewport.X,band.Bounds.Y-frame.Viewport.Y,band.Bounds.Width,band.Bounds.Height);int value=Premultiplied(color,Math.Max(0,Math.Min(85,opacity+band.Opacity)));bounds=Rectangle.Intersect(bounds,new Rectangle(Point.Empty,bitmapSize));for(int x=0;x<bounds.Width;x++)rippleRow[x]=value;Fill(bounds,rippleRow);dirty.Add(bounds);}
                 previousBands=dirty.ToArray();
                 var location=frame.Viewport.Location;var source=Point.Empty;var size=bitmapSize;
                 var blend=new Blend {Alpha=255,Format=1};
@@ -373,6 +411,8 @@ namespace SheetPilot.Excel
             private static int Premultiplied(Color color,int opacity){int a=255*opacity/100;return (a<<24)|((color.R*a/255)<<16)|((color.G*a/255)<<8)|(color.B*a/255);}
             private void Fill(Rectangle rectangle,int[] row)
             {
+                rectangle=Rectangle.Intersect(rectangle,new Rectangle(Point.Empty,bitmapSize));
+                if(rectangle.Width<=0 || rectangle.Height<=0 || rectangle.Width>row.Length)return;
                 for(int y=rectangle.Top;y<rectangle.Bottom;y++)
                     Marshal.Copy(row,0,IntPtr.Add(pixels,(y*bitmapSize.Width+rectangle.Left)*4),rectangle.Width);
             }

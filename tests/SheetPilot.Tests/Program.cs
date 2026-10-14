@@ -24,6 +24,7 @@ internal static partial class Program
         {
             if(args.Length==0 && Path.GetFileNameWithoutExtension(System.Reflection.Assembly.GetExecutingAssembly().Location).Contains("Compatibility")) return CompatibilityRunner();
             Console.WriteLine("Test process: " + (Environment.Is64BitProcess ? "x64" : "x86"));
+            if(args.Length>0 && args[0]=="--v1"){V1CoreTests();if(args.Contains("--excel"))V1ExcelTests(args.Contains("--large"));Console.WriteLine("PASS "+checks+" assertions");return 0;}
             if(args.Length>2 && args[0]=="--release-ui") {ReleaseUiSmoke(Path.GetFullPath(args[1]),Path.GetFullPath(args[2]));return 0;}
             if(args.Length>0 && args[0]=="--release-features") { ReleaseFeatureTests(); if(args.Length>1 && args[1]=="--excel") ReleaseFeatureExcelTests(); Console.WriteLine("PASS "+checks+" assertions");return 0; }
             if(args.Length>2 && args[0]=="--interactive") { InteractiveTests(Path.GetFullPath(args[1]),Path.GetFullPath(args[2])); return 0; }

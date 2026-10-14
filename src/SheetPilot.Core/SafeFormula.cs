@@ -22,20 +22,22 @@ namespace SheetPilot.Core
     {
         internal readonly MaskSnapshot Snapshot;
         internal readonly bool NeutralNames;
-        private readonly Dictionary<string,DataCell> cells;
+        private readonly Dictionary<long,DataCell> cells;
         private readonly Dictionary<string,FormulaResult> cache=new Dictionary<string,FormulaResult>();
         private readonly HashSet<string> visiting=new HashSet<string>();
         private readonly CancellationToken cancellation;
-        private int operations;
+        private long operations;
         public FormulaWorkbook(MaskSnapshot snapshot,bool neutralNames=false,CancellationToken cancellation=default(CancellationToken))
-        { Snapshot=snapshot; NeutralNames=neutralNames; cells=snapshot.Cells.ToDictionary(c=>c.Key);this.cancellation=cancellation; }
+        { Snapshot=snapshot; NeutralNames=neutralNames; cells=snapshot.Cells.ToDictionary(c=>CellKey(c.Sheet,c.Row,c.Column));this.cancellation=cancellation; }
+        private static long CellKey(int sheet,int row,int column)=>((long)sheet*1048576+row-1)*16384+column-1;
         internal void Step()
-        { cancellation.ThrowIfCancellationRequested();if(++operations>5000000)throw new InvalidOperationException("公式验证计算量超过本版上限，请缩小工作簿。"); }
+        { cancellation.ThrowIfCancellationRequested();if(++operations>Math.Max(5000000L,(long)Snapshot.Cells.Count*100))throw new InvalidOperationException("公式验证计算量超过本版上限，请缩小工作簿。"); }
         public FormulaResult Evaluate(string key)
         {
             Step();
             if(cache.TryGetValue(key,out var cached)) return cached;
-            if(!cells.TryGetValue(key,out var cell)) return new FormulaResult { Value=null,Trace="" };
+            var parts=key.Split(':');
+            if(!cells.TryGetValue(CellKey(int.Parse(parts[0],CultureInfo.InvariantCulture),int.Parse(parts[1],CultureInfo.InvariantCulture),int.Parse(parts[2],CultureInfo.InvariantCulture)),out var cell)) return new FormulaResult { Value=null,Trace="" };
             if(cell.Formula==null) return new FormulaResult { Value=cell.Value,Trace="" };
             if(visiting.Count>=128 || !visiting.Add(key)) throw new InvalidOperationException(cell.Location+"：循环引用或依赖深度超限。");
             try
@@ -49,7 +51,11 @@ namespace SheetPilot.Core
             finally { visiting.Remove(key); }
         }
         internal object Read(int sheet,int row,int column,StringBuilder trace)
-        { var key=sheet+":"+row+":"+column; var v=Evaluate(key); if(v.Trace.Length>0) trace.Append('{').Append(key).Append(':').Append(v.Trace).Append('}'); return v.Value; }
+        {
+            Step();if(!cells.TryGetValue(CellKey(sheet,row,column),out var cell))return null;
+            if(cell.Formula==null)return cell.Value;
+            var key=cell.Key;var v=Evaluate(key);if(v.Trace.Length>0)trace.Append('{').Append(key).Append(':').Append(v.Trace).Append('}');return v.Value;
+        }
         internal int SheetIndex(string name)
         {
             for(int i=0;i<Snapshot.Sheets.Count;i++) if(string.Equals(NeutralNames?"Sheet"+(i+1):Snapshot.Sheets[i].Name,name,StringComparison.OrdinalIgnoreCase)) return i;
@@ -79,7 +85,8 @@ namespace SheetPilot.Core
                 {
                     string raw=Unquote(t),result=raw;
                     if(mappings.TryGetValue(raw,out var replacement)) result=replacement;
-                    else if(raw.StartsWith("=",StringComparison.Ordinal) && mappings.TryGetValue(raw.Substring(1),out replacement)) result="="+replacement;
+                    else foreach(string op in new[]{"<>","<=",">=","=","<",">"})
+                        if(raw.StartsWith(op,StringComparison.Ordinal) && mappings.TryGetValue(raw.Substring(op.Length),out replacement)){result=op+replacement;break;}
                     tokens[i]="\""+result.Replace("\"","\"\"")+"\"";
                 }
                 else if(i+1<tokens.Count && tokens[i+1]=="!")
@@ -134,9 +141,19 @@ namespace SheetPilot.Core
                 {
                     int target=sheet;
                     if(Peek=="!") { Take(); target=workbook.SheetIndex(token.StartsWith("'",StringComparison.Ordinal)?token.Substring(1,token.Length-2).Replace("''","'"):token); token=Take(); }
-                    ParseAddress(token,out int row,out int column); int endRow=row,endColumn=column;
-                    if(Peek==":") { Take();ParseAddress(Take(),out endRow,out endColumn); }
-                    if(endRow<row || endColumn<column || (long)(endRow-row+1)*(endColumn-column+1)>200000) throw new InvalidOperationException("公式引用区域过大或方向不受支持。");
+                    int row,column,endRow,endColumn;
+                    if(Peek==":" && Regex.IsMatch(token,@"^\$?[A-Za-z]{1,3}$"))
+                    {
+                        ParseAddress(token+"1",out row,out column);Take();string end=Take();
+                        if(!Regex.IsMatch(end,@"^\$?[A-Za-z]{1,3}$"))throw new InvalidOperationException("整列引用不完整。");
+                        ParseAddress(end+"1048576",out endRow,out endColumn);
+                    }
+                    else
+                    {
+                        ParseAddress(token,out row,out column);endRow=row;endColumn=column;
+                        if(Peek==":"){Take();ParseAddress(Take(),out endRow,out endColumn);}
+                    }
+                    if(endRow<row || endColumn<column || (long)(endRow-row+1)*(endColumn-column+1)>8000000) throw new InvalidOperationException("单个公式引用区域超过800万格验证预算或方向不受支持。");
                     left=new Node { Op="range",Range=new FormulaRange { Sheet=target,Row=row,Column=column,Rows=endRow-row+1,Columns=endColumn-column+1 } };
                 }
                 if(Peek=="%") { Take();left=new Node { Op="percent",Left=left }; }

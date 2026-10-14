@@ -11,6 +11,7 @@ namespace SheetPilot.Excel
         private object application;
         private readonly List<Tuple<int, Delegate>> handlers = new List<Tuple<int, Delegate>>();
         public ExcelEvents(object application) { this.application = application; }
+        public void Change(Action action) => Add(1564,new Action<object,object>((sheet,target)=>action()));
         public void Selection(Action action) => Add(1558, new Action<object, object>((sheet, target) => action()));
         public void Activation(Action action)
         {

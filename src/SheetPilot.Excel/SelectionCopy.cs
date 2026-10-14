@@ -26,7 +26,7 @@ namespace SheetPilot.Excel
     public sealed partial class ExcelGateway
     {
         private const int CopyBlockCells = 32768;
-        private sealed class FormulaBlock { public CellRect Rect; public object[,] Formulas; }
+        private sealed class FormulaBlock { public CellRect Rect; public object[,] Formulas, CachedValues; }
 
         /// <summary>Creates only a new, unsaved workbook. On any failure/cancellation closes that workbook.
         /// All COM stays on the owning STA. The progress hook may throw OperationCanceledException.</summary>
@@ -152,6 +152,28 @@ namespace SheetPilot.Excel
                 report("完成校验", cells);
                 if (output.LinkSources(1) != null) throw new InvalidOperationException("结果中检测到外部工作簿链接，已取消复制，请检查源范围的格式或批注。");
                 target.EnableCalculation = true; target.Calculate();
+                // Freeze every drifting retained result, then recalculate to a fixed point:
+                // freezing a nested subtotal can in turn change its parent subtotal.
+                int remaining=result.KeptFormulas;
+                while(true)
+                {
+                    int drift=0;
+                    foreach(var block in blocks)
+                    {
+                        report("复核保留公式",cells);object raw=target.Range[block.Rect.Address].Value2;var values=raw as object[,];
+                        for(int r=0;r<block.Rect.Rows;r++)for(int c=0;c<block.Rect.Columns;c++)
+                        {
+                            if(block.Formulas[r,c]==null)continue;
+                            object actual=values==null?raw:values[r+1,c+1],expected=block.CachedValues[r,c];
+                            if(CopyEquivalent(expected,actual))continue;
+                            if(options.FormulaFallback==1)throw new InvalidOperationException("保留公式在目标工作簿重算后结果改变，已停止复制。");
+                            target.Range[DataCell.Address(block.Rect.Row+r,block.Rect.Column+c)].Value2=LiteralCopyValue(expected);
+                            block.Formulas[r,c]=null;drift++;result.KeptFormulas--;result.ValueFormulas++;
+                            const string reason="重算结果变化（嵌套小计、可见性等）";result.FallbackReasons.TryGetValue(reason,out int n);result.FallbackReasons[reason]=n+1;
+                        }
+                    }
+                    if(drift==0)break;remaining-=drift;if(remaining<0)throw new InvalidOperationException("公式校验未收敛。");target.Calculate();
+                }
                 if (options.KeepSourceActive) { sourceBook.Activate(); source.Activate(); }
                 else { output.Activate(); target.Activate(); target.Range[areas[0].Address].Select(); }
                 result.Workbook = (object)output; succeeded = true;
@@ -175,6 +197,8 @@ namespace SheetPilot.Excel
             return result;
         }
 
+        private static bool CopyEquivalent(object a,object b)
+        {if(a is ErrorWrapper x && b is ErrorWrapper y)return x.ErrorCode==y.ErrorCode;return MaskPlanner.Equivalent(a,b);}
         private static CellRect CopyRect(dynamic range) => new CellRect((int)range.Row, (int)range.Column, (int)range.Rows.Count, (int)range.Columns.Count);
         private static void CopyLayout(dynamic source, dynamic target, CellRect rect, Action<string, long> report)
         {
@@ -333,7 +357,7 @@ namespace SheetPilot.Excel
                     if (formulaCells == null) { done += rect.Count; continue; }
                     dynamic intersection = source.Application.Intersect(chunk, formulaCells);
                     if (intersection == null) { done += rect.Count; continue; }
-                    object raw = chunk.Formula; var values = raw as object[,];
+                    object raw = chunk.Formula, cachedRaw=chunk.Value2; var values = raw as object[,];var cached=cachedRaw as object[,];
                     var retained = new object[rect.Rows, rect.Columns];
                     for (int a = 1; a <= (int)intersection.Areas.Count; a++)
                     {
@@ -375,9 +399,9 @@ namespace SheetPilot.Excel
                         }
                         foreach (var pair in active.Where(x => !next.ContainsKey(x.Key)))
                         {
-                            var run = pair.Value; var formulas = new object[run.Rows, run.Columns];
-                            for (int rr = 0; rr < run.Rows; rr++) for (int cc = 0; cc < run.Columns; cc++) formulas[rr, cc] = retained[run.Row + rr, run.Column + cc];
-                            blocks.Add(new FormulaBlock { Rect = new CellRect(rect.Row + run.Row, rect.Column + run.Column, run.Rows, run.Columns), Formulas = formulas });
+                            var run = pair.Value; var formulas = new object[run.Rows, run.Columns];var expected=new object[run.Rows,run.Columns];
+                            for (int rr = 0; rr < run.Rows; rr++) for (int cc = 0; cc < run.Columns; cc++) {formulas[rr, cc] = retained[run.Row + rr, run.Column + cc];expected[rr,cc]=cached==null?cachedRaw:cached[run.Row+rr+1,run.Column+cc+1];}
+                            blocks.Add(new FormulaBlock { Rect = new CellRect(rect.Row + run.Row, rect.Column + run.Column, run.Rows, run.Columns), Formulas = formulas, CachedValues=expected });
                         }
                         active = next;
                     }

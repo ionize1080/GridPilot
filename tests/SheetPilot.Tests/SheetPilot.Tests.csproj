@@ -1,5 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
- <PropertyGroup><TargetFramework>net462</TargetFramework><OutputType>Exe</OutputType><UseWPF>true</UseWPF><UseWindowsForms>true</UseWindowsForms><AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects></PropertyGroup>
+ <PropertyGroup><TargetFramework>net462</TargetFramework><OutputType>Exe</OutputType><UseWPF>true</UseWPF><UseWindowsForms>true</UseWindowsForms><AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects><RuntimeIdentifier>win-x86</RuntimeIdentifier><AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath><PlatformTarget>AnyCPU</PlatformTarget><Prefer32Bit>false</Prefer32Bit></PropertyGroup>
  <ItemGroup>
   <ProjectReference Include="../../src/SheetPilot.Core/SheetPilot.Core.csproj"/>
   <ProjectReference Include="../../src/SheetPilot.UI/SheetPilot.UI.csproj"/>
@@ -8,6 +8,9 @@
   <Compile Include="../../src/SheetPilot.Excel/SelectionCopy.cs" Link="SelectionCopy.cs"/>
   <Compile Include="../../src/SheetPilot.Excel/TextOperations.cs" Link="TextOperations.cs"/>
   <Compile Include="../../src/SheetPilot.Excel/MaskAppearance.cs" Link="MaskAppearance.cs" /><Compile Include="../../src/SheetPilot.Excel/MaskOperations.cs" Link="MaskOperations.cs"/>
+  <Compile Include="../../src/SheetPilot.Excel/MaskAppearanceStream.cs" Link="MaskAppearanceStream.cs"/>
+  <Compile Include="../../src/SheetPilot.Excel/MaskScan.cs" Link="MaskScan.cs"/>
+  <Compile Include="../../src/SheetPilot.Excel/WorksheetFocus.cs" Link="WorksheetFocus.cs"/>
   <Compile Include="../../src/SheetPilot.Excel/MaskComLifetime.cs" Link="MaskComLifetime.cs"/>
   <Compile Include="../../src/SheetPilot.Excel/FocusOverlay.cs" Link="FocusOverlay.cs"/>
   <Compile Include="../../src/SheetPilot.Excel/ExcelEvents.cs" Link="ExcelEvents.cs"/>

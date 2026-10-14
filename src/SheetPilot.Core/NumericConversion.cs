@@ -25,13 +25,16 @@ namespace SheetPilot.Core
             if (!string.IsNullOrEmpty(group) && mantissa.Contains(group))
             {
                 if (!options.AllowThousands) { reason = "千位分隔符未启用"; return false; }
-                string integer = mantissa.Split(new[] { culture.NumberFormat.NumberDecimalSeparator }, StringSplitOptions.None)[0];
+                string[] parts=mantissa.Split(new[]{culture.NumberFormat.NumberDecimalSeparator},StringSplitOptions.None);
+                if(parts.Length>2 || (parts.Length==2 && parts[1].Contains(group))){reason="小数部分含千位分隔符";return false;}
+                string integer=parts[0];
                 string[] groups = integer.Split(new[] { group }, StringSplitOptions.None);
                 int[] sizes = culture.NumberFormat.NumberGroupSizes;
+                if(groups.Length<2 || sizes.Length==0){reason="千位分组不完整";return false;}
                 for (int i = groups.Length - 1, level = 0; i > 0; i--, level++)
                     if (groups[i].Length != sizes[Math.Min(level, sizes.Length - 1)] || !groups[i].All(char.IsDigit)) { reason = "千位分组不完整"; return false; }
-                int firstSize = sizes[Math.Min(groups.Length - 2, sizes.Length - 1)];
-                if (groups[0].Length < 1 || groups[0].Length > firstSize || !groups[0].All(char.IsDigit)) { reason = "千位分组不完整"; return false; }
+                int firstSize = sizes[Math.Min(groups.Length - 1, sizes.Length - 1)];
+                if (groups[0].Length < 1 || (firstSize>0 && groups[0].Length > firstSize) || !groups[0].All(char.IsDigit)) { reason = "千位分组不完整"; return false; }
             }
             var style = NumberStyles.Float | (options.AllowThousands ? NumberStyles.AllowThousands : NumberStyles.None);
             if (!double.TryParse(text, style, culture, out value) || double.IsInfinity(value) || double.IsNaN(value)) return false;

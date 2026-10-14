@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading;
+using System.Threading.Tasks;
 using System.IO.Compression;
 using System.Xml;
 using System.Xml.Linq;
@@ -15,104 +16,127 @@ namespace SheetPilot.Excel
     {
         internal static int LastMaskWriterProcess;
         internal static string LastMaskPerformance;
-        public MaskSnapshot CaptureMaskWorkbook()
+        public MaskSnapshot CaptureMaskWorkbook(CancellationToken cancel=default(CancellationToken),Action<string,int,long,long> progress=null)
         {
-            CheckThread(); dynamic app=application(), book=app.ActiveWorkbook;
-            if(book==null) throw new InvalidOperationException("请先打开需要脱敏的工作簿。");
-            if((int)app.CalculationState!=0) throw new InvalidOperationException("请等待 Excel 完成计算后再分析。");
-            var snapshot=new MaskSnapshot { WorkbookKey=WorkbookKey(book),Date1904=(bool)book.Date1904 };
-            dynamic sheets=book.Worksheets; long count=0;
-            for(int i=1;i<=(int)sheets.Count;i++)
+            CheckThread();dynamic app=application(),book=app.ActiveWorkbook;
+            if(book==null)throw new InvalidOperationException("请先打开需要脱敏的工作簿。");
+            if((int)app.CalculationState!=0)throw new InvalidOperationException("请等待 Excel 完成计算后再分析。");
+            var snapshot=new MaskSnapshot {WorkbookKey=WorkbookKey(book),Date1904=(bool)book.Date1904};
+            GetWindowThreadProcessIdForMask(new IntPtr((int)app.Hwnd),out snapshot.HostProcessId);
+            dynamic sheets=book.Worksheets;int total=sheets.Count;long count=0;
+            for(int i=1;i<=total;i++)
             {
-                dynamic sheet=sheets[i];
-                var spec=new DataSheet { Name=(string)sheet.Name };snapshot.Sheets.Add(spec);
-                dynamic all=sheet.Cells;
-                dynamic lastRow=all.Find("*",Type.Missing,-4123,2,1,2,false,Type.Missing,false);
-                if(lastRow==null)continue;
-                dynamic lastColumn=all.Find("*",Type.Missing,-4123,2,2,2,false,Type.Missing,false);
-                dynamic first=all.Find("*",Type.Missing,-4123,2,1,1,false,Type.Missing,false);
-                spec.Rows=(int)lastRow.Row;spec.Columns=(int)lastColumn.Column;
-                int firstRow=(int)first.Row, limit=Environment.Is64BitProcess?2000000:500000;
-                dynamic bounded=sheet.Range[sheet.Cells[firstRow,1],sheet.Cells[spec.Rows,spec.Columns]];
-                var ranges=new List<object>();
-                // SpecialCells dirties some Excel workbooks even for read-only inspection.
-                // Dense data uses bounded blocks; widely separated cells use Find traversal.
-                if((long)(spec.Rows-firstRow+1)*spec.Columns<=8000000)ranges.Add((object)bounded);
-                else
+                cancel.ThrowIfCancellationRequested();dynamic sheet=sheets[i];var spec=new DataSheet {Name=(string)sheet.Name};snapshot.Sheets.Add(spec);
+                var rows=new HashSet<int>();var columns=new HashSet<int>();int firstRow=int.MaxValue;
+                ScanMaskSheet((object)sheet,i-1,cancel,cell=>
                 {
-                    dynamic cursor=first;string initial=cursor.Address;
-                    do
-                    {
-                        ranges.Add((object)cursor);
-                        if(ranges.Count>limit)throw new InvalidOperationException("有内容单元格超过本进程上限 "+limit.ToString("N0")+"，请分批处理。");
-                        cursor=all.Find("*",cursor,-4123,2,1,1,false,Type.Missing,false);
-                    }while(cursor!=null && (string)cursor.Address!=initial);
-                }
-                var seen=new HashSet<string>();
-                foreach(dynamic range in ranges)
+                    snapshot.Cells.Add(cell);rows.Add(cell.Row);columns.Add(cell.Column);firstRow=Math.Min(firstRow,cell.Row);
+                    spec.Rows=Math.Max(spec.Rows,cell.Row);spec.Columns=Math.Max(spec.Columns,cell.Column);spec.NonEmptyCells++;count++;
+                    if((count&32767)==0)CheckMaskMemory();
+                },n=>progress?.Invoke("扫描「"+spec.Name+"」",(i-1)*100/total,count,0));
+                spec.NonEmptyRows=rows.Count;spec.NonEmptyColumns=columns.Count;
+                if(rows.Count>0)
                 {
-                    int r0=range.Row,c0=range.Column,rows=range.Rows.Count,cols=range.Columns.Count;
-                    int step=Math.Max(1,16384/cols);
-                    for(int offset=0;offset<rows;offset+=step)
-                    {
-                        int nr=Math.Min(step,rows-offset);dynamic block=sheet.Range[sheet.Cells[r0+offset,c0],sheet.Cells[r0+offset+nr-1,c0+cols-1]];
-                        object raw=block.Value2,rawFormula=block.Formula;var values=raw as object[,];var formulas=rawFormula as object[,];
-                        for(int r=1;r<=nr;r++)for(int c=1;c<=cols;c++)
-                        {
-                            object value=values==null?raw:values[r,c],f=formulas==null?rawFormula:formulas[r,c];
-                            if(value==null && (f==null || Equals(f,"")))continue;
-                            int row=r0+offset+r-1,col=c0+c-1;string key=row+":"+col;if(!seen.Add(key))continue;
-                            if(value is ErrorWrapper || value is int)throw new InvalidOperationException("S"+i+"!"+DataCell.Address(row,col)+"：源数据含 Excel 错误值，请先处理。");
-                            string formula=null;
-                            if(f is string text && text.StartsWith("=",StringComparison.Ordinal))
-                            { dynamic cell=sheet.Cells[row,col];if((bool)cell.HasFormula){if((bool)cell.HasArray)throw new InvalidOperationException("S"+i+"：数组公式不在本版支持范围。");formula=text;} }
-                            if(++count>limit)throw new InvalidOperationException("有内容单元格超过本进程上限 "+limit.ToString("N0")+"（格式空白不计数），请分批处理。");
-                            snapshot.Cells.Add(new DataCell {Sheet=i-1,Row=row,Column=col,Value=value,Formula=formula});
-                        }
-                    }
+                    var merged=new HashSet<string>();
+                    foreach(var span in columns.GroupBy(c=>(c-1)/256).OrderBy(g=>g.Key))
+                    {cancel.ThrowIfCancellationRequested();VisitMerges((object)sheet,new CellRect(firstRow,span.Min(),Math.Min(40,spec.Rows-firstRow+1),span.Max()-span.Min()+1),m=>
+                        {if(merged.Add(m.Address))spec.HeaderMerges.Add(new HeaderMerge {Row=m.Row,Column=m.Column,Rows=m.Rows,Columns=m.Columns});},(stage,done)=>cancel.ThrowIfCancellationRequested());}
                 }
-                var merged=new HashSet<string>();
-                VisitMerges((object)sheet,new CellRect(firstRow,1,Math.Min(40,spec.Rows-firstRow+1),spec.Columns),m=>
-                {if(merged.Add(m.Address))spec.HeaderMerges.Add(new HeaderMerge {Row=m.Row,Column=m.Column,Rows=m.Rows,Columns=m.Columns});},(stage,done)=>{});
-
+                progress?.Invoke("已扫描「"+spec.Name+"」",i*100/total,count,0);
             }
-            if(snapshot.Sheets.Count==0)throw new InvalidOperationException("工作簿没有普通工作表。");
-            snapshot.Cells=snapshot.Cells.OrderBy(c=>c.Sheet).ThenBy(c=>c.Row).ThenBy(c=>c.Column).ToList();
-            return snapshot;
+            if(total==0)throw new InvalidOperationException("工作簿没有普通工作表。");
+            snapshot.Cells.Sort(CompareMaskCell);return snapshot;
+        }
+        private static void CheckMaskMemory()
+        {
+            // Leave headroom for the output snapshot, formula caches, Excel and the writer.
+            long budget=Environment.Is64BitProcess?4L*1024*1024*1024:450L*1024*1024;
+            if(GC.GetTotalMemory(false)>budget)throw new InvalidOperationException("已接近当前进程的安全内存预算。未生成部分结果；请使用64位 Excel 或拆分工作簿。");
         }
         public static IReadOnlyList<MaskRule> SuggestMaskRules(MaskSnapshot snapshot)
         {
             return MaskInference.Suggest(snapshot);
         }
-        public void VerifyMaskSource(MaskSnapshot source)
+        public void VerifyMaskSource(MaskSnapshot source,CancellationToken cancel=default(CancellationToken),Action<string,int,long,long> progress=null)
         {
-            var current=CaptureMaskWorkbook();
-            if(source.WorkbookKey!=current.WorkbookKey || source.Date1904!=current.Date1904 || source.Sheets.Count!=current.Sheets.Count || source.Cells.Count!=current.Cells.Count ||
-                !source.Sheets.Select(s=>s.Name).SequenceEqual(current.Sheets.Select(s=>s.Name)) ||
-                source.Cells.Where((c,i)=>c.Key!=current.Cells[i].Key || !Equals(c.Value,current.Cells[i].Value) || c.Formula!=current.Cells[i].Formula).Any())
-                throw new InvalidOperationException("源工作簿在预览后改变，请关闭窗口并重新分析。");
+            CheckThread();dynamic app=application(),book=app.ActiveWorkbook;
+            if(book==null || WorkbookKey(book)!=source.WorkbookKey || (bool)book.Date1904!=source.Date1904 || (int)book.Worksheets.Count!=source.Sheets.Count || (int)app.CalculationState!=0)
+                throw new InvalidOperationException("源工作簿已切换或改变，请重新分析。");
+            long count=0;
+            for(int i=0;i<source.Sheets.Count;i++)
+            {
+                dynamic sheet=book.Worksheets[i+1];
+                if((string)sheet.Name!=source.Sheets[i].Name)throw new InvalidOperationException("源工作表已改变，请重新分析。");
+                ScanMaskSheet((object)sheet,i,cancel,cell=>
+                {var expected=FindMaskCell(source.Cells,cell);if(expected==null || !Equals(expected.Value,cell.Value) || expected.Formula!=cell.Formula)throw new InvalidOperationException("源工作簿在预览后改变，请重新分析。");count++;},n=>progress?.Invoke("复核源工作簿",(int)Math.Min(100,100*count/Math.Max(1,source.Cells.Count)),count,source.Cells.Count));
+            }
+            if(count!=source.Cells.Count)throw new InvalidOperationException("源工作簿有数据被删除，请重新分析。");
+        }
+        private string PrepareMaskExport(MaskSnapshot source,string target,bool preserveFormatting,CancellationToken cancel,Action<string,int,long,long> progress)
+        {
+            CheckThread();VerifyMaskSource(source,cancel,progress);cancel.ThrowIfCancellationRequested();
+            if(!string.Equals(Path.GetExtension(target),".xlsx",StringComparison.OrdinalIgnoreCase) || File.Exists(target))throw new InvalidOperationException("请选择尚不存在的 .xlsx 文件；不覆盖已有文件。");
+            string directory=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"GridPilot","Staging",Guid.NewGuid().ToString("N"));Directory.CreateDirectory(directory);
+            try
+            {
+                if(preserveFormatting)
+                {dynamic book=((dynamic)application()).ActiveWorkbook;string extension=Path.GetExtension((string)book.Name);if(string.IsNullOrEmpty(extension))extension=".xlsx";book.SaveCopyAs(Path.Combine(directory,"appearance-source"+extension));}
+                return directory;
+            }
+            catch{CleanupMaskDirectory(directory);throw;}
+        }
+        private string CommitMaskExport(MaskSnapshot source,string stage,string target,CancellationToken cancel,Action<string,int,long,long> progress)
+        {
+            CheckThread();VerifyMaskSource(source,cancel,progress);cancel.ThrowIfCancellationRequested();
+            string destination=Path.Combine(Path.GetDirectoryName(target),".GridPilot-"+Guid.NewGuid().ToString("N")+".tmp");
+            try{File.Copy(stage,destination,false);cancel.ThrowIfCancellationRequested();File.Move(destination,target);progress?.Invoke("导出完成",100,source.Cells.Count,source.Cells.Count);return target;}
+            finally{if(File.Exists(destination))File.Delete(destination);}
+        }
+        private static Task<string> StartMaskWriter(MaskSnapshot source,MaskResult result,string directory,CancellationToken cancel,bool preserveFormatting,Action<string,int,long,long> progress)
+        {
+            var completion=new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var thread=new Thread(()=>{try{completion.SetResult(ExportMaskWorker(source,result,directory,cancel,preserveFormatting,progress));}catch(OperationCanceledException){completion.SetCanceled();}catch(Exception ex){completion.SetException(ex);}}){IsBackground=true,Name="GridPilot export STA"};
+            thread.SetApartmentState(ApartmentState.STA);thread.Start();return completion.Task;
+        }
+        public async Task<string> ExportMaskAsync(MaskSnapshot source,MaskResult result,string target,CancellationToken cancel,bool preserveFormatting=false,Action<string,int,long,long> progress=null)
+        {
+            target=Path.GetFullPath(target);string directory=PrepareMaskExport(source,target,preserveFormatting,cancel,progress);
+            try{string stage=await StartMaskWriter(source,result,directory,cancel,preserveFormatting,progress);return CommitMaskExport(source,stage,target,cancel,progress);}
+            finally{CleanupMaskDirectory(directory);}
         }
         public string ExportMask(MaskSnapshot source,MaskResult result,string target,CancellationToken cancel,bool preserveFormatting=false)
         {
-            CheckThread(); VerifyMaskSource(source); cancel.ThrowIfCancellationRequested();
-            target=Path.GetFullPath(target);
-            if(!string.Equals(Path.GetExtension(target),".xlsx",StringComparison.OrdinalIgnoreCase))throw new InvalidOperationException("结果必须保存为新的 .xlsx 文件。");
-            if(File.Exists(target))throw new InvalidOperationException("目标文件已存在，请选择新名称；不覆盖已有文件。");
-            string stageDirectory=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"GridPilot","Staging",Guid.NewGuid().ToString("N"));
-            Directory.CreateDirectory(stageDirectory);string stage=Path.Combine(stageDirectory,"result.xlsx");
-            string destinationStage=Path.Combine(Path.GetDirectoryName(target),".GridPilot-"+Guid.NewGuid().ToString("N")+".tmp");
+            target=Path.GetFullPath(target);string directory=PrepareMaskExport(source,target,preserveFormatting,cancel,null);
+            try
+            {
+                var task=StartMaskWriter(source,result,directory,cancel,preserveFormatting,null);
+                // Synchronous API for native callers/tests still pumps the host STA for OLE.
+                while(!task.IsCompleted){System.Windows.Forms.Application.DoEvents();Thread.Sleep(10);}
+                return CommitMaskExport(source,task.GetAwaiter().GetResult(),target,cancel,null);
+            }
+            finally{CleanupMaskDirectory(directory);}
+        }
+        private static void CleanupMaskDirectory(string directory)
+        {try{foreach(string path in Directory.GetFiles(directory))File.Delete(path);Directory.Delete(directory);}catch(IOException){}catch(UnauthorizedAccessException){}}
+        private static string ExportMaskWorker(MaskSnapshot source,MaskResult result,string stageDirectory,CancellationToken cancel,bool preserveFormatting,Action<string,int,long,long> progress)
+        {
+            cancel.ThrowIfCancellationRequested();
+            string stage=Path.Combine(stageDirectory,"result.xlsx");
             var lifetime=new MaskComLifetime();dynamic writer=null,book=null; int process=0;
             var clock=System.Diagnostics.Stopwatch.StartNew();var stages=new List<string>();Action<string> timing=stage=>stages.Add(stage+"="+clock.ElapsedMilliseconds+"ms");
             try
             {
                 // A separate owned Excel instance avoids recalculating or changing the source workbook.
-                writer=lifetime.Hold(Activator.CreateInstance(Type.GetTypeFromProgID("Excel.Application")));
-                writer.Visible=false;writer.DisplayAlerts=false;writer.EnableEvents=false;writer.AutomationSecurity=3;
+                writer=Activator.CreateInstance(Type.GetTypeFromProgID("Excel.Application"));
                 GetWindowThreadProcessIdForMask(new IntPtr((int)writer.Hwnd),out process);
+                if(process==source.HostProcessId){Marshal.ReleaseComObject((object)writer);writer=null;throw new InvalidOperationException("无法建立独立导出进程。");}
+                lifetime.Hold((object)writer);
+                writer.Visible=false;writer.DisplayAlerts=false;writer.EnableEvents=false;writer.AutomationSecurity=3;
                 LastMaskWriterProcess=process;
                 timing("writer");
                 dynamic books=lifetime.Hold(writer.Workbooks);book=lifetime.Hold(books.Add(-4167));book.Date1904=source.Date1904;
-                writer.Calculation=-4135;writer.CalculateBeforeSave=false;
+                writer.Calculation=-4135;writer.CalculateBeforeSave=false;try{writer.PrintCommunication=false;}catch(COMException){}
+                progress?.Invoke("写入脱敏副本",5,0,source.Cells.Count);long written=0;
                 timing("blank");
                 dynamic sheets=lifetime.Hold(book.Worksheets);
                 for(int s=0;s<source.Sheets.Count;s++)
@@ -122,6 +146,8 @@ namespace SheetPilot.Excel
                     cancel.ThrowIfCancellationRequested();dynamic sheet=lifetime.Hold(sheets[s+1]),all=lifetime.Hold(sheet.Cells);var spec=source.Sheets[s];
                     foreach(var group in result.Output.Cells.Where(c=>c.Sheet==s).GroupBy(c=>(c.Row-1)/128))
                     {
+                        using(var scope=lifetime.Scope())
+                        {
                         var cells=group.ToArray();int top=cells.Min(c=>c.Row),bottom=cells.Max(c=>c.Row),left=cells.Min(c=>c.Column),right=cells.Max(c=>c.Column);
                         // One row block is at most 128 x 16384; split columns too for sparse workbooks.
                         for(int start=left;start<=right;start+=128)
@@ -133,32 +159,28 @@ namespace SheetPilot.Excel
                         }
                         foreach(var cell in cells.Where(c=>c.Formula!=null)){cancel.ThrowIfCancellationRequested();lifetime.Hold(all[cell.Row,cell.Column]).Formula=cell.Formula;}
                         foreach(var cell in cells.Where(c=>c.NumberFormat!=null))lifetime.Hold(all[cell.Row,cell.Column]).NumberFormat=cell.NumberFormat;
+                        written+=cells.Length;progress?.Invoke("写入脱敏副本",5+(int)(45*written/Math.Max(1,source.Cells.Count)),written,source.Cells.Count);
+                        }
                     }
                     lifetime.Hold(sheet.Columns).ColumnWidth=20;
                 }
-                timing("data");
+                timing("data");progress?.Invoke("重算并验证副本",55,source.Cells.Count,source.Cells.Count);
                 if(result.Formulas>0)writer.CalculateFullRebuild();
                 timing("calculate");
                 ValidateMaskBook(book,result,cancel,lifetime);
                 timing("write+validate");
                 dynamic properties=lifetime.Hold(book.BuiltinDocumentProperties);
                 foreach(string property in new[]{"Author","Last Author","Title","Subject","Comments","Keywords","Category","Company","Manager"}) try { lifetime.Hold(properties[property]).Value=""; }catch(COMException) { }
-                book.SaveAs(stage,51);book.Close(false);book=null;
+                book.SaveAs(stage,51);book.Close(false);lifetime.Release((object)book);book=null;
                 timing("save");
-                if(preserveFormatting) PreserveMaskAppearance((object)((dynamic)application()).ActiveWorkbook,(object)writer,stage,stageDirectory,result,cancel,lifetime);
-                timing("appearance");
+                if(preserveFormatting) PreserveMaskAppearance(Directory.GetFiles(stageDirectory,"appearance-source.*").Single(),(object)writer,stage,stageDirectory,result,cancel,lifetime);
+                timing("appearance");progress?.Invoke("重开文件并核对全表",80,source.Cells.Count,source.Cells.Count);
                 CleanMaskMetadata(stage);
                 try {book=lifetime.Hold(books.Open(stage,0,true));}
                 catch(COMException ex){throw new InvalidOperationException("Excel 无法重新打开生成文件，未交付结果。",ex);}
-                if(result.Formulas>0)writer.CalculateFullRebuild();ValidateMaskBook(book,result,cancel,lifetime);book.Close(false);book=null;
+                if(result.Formulas>0)writer.CalculateFullRebuild();ValidateMaskBook(book,result,cancel,lifetime);book.Close(false);lifetime.Release((object)book);book=null;
                 timing("reopen");
-                cancel.ThrowIfCancellationRequested(); VerifyMaskSource(source);
-                // Commit only a complete, verified file; a failed copy never exposes a partial .xlsx.
-                File.Copy(stage,destinationStage,false);
-                cancel.ThrowIfCancellationRequested();
-                File.Move(destinationStage,target);
-                timing("commit");
-                return target;
+                cancel.ThrowIfCancellationRequested();return stage;
             }
             finally
             {
@@ -167,8 +189,23 @@ namespace SheetPilot.Excel
                 timing("quit");
                 lifetime.Dispose();writer=null;book=null;
                 timing("release");LastMaskPerformance=string.Join("; ",stages);
-                try {if(File.Exists(destinationStage))File.Delete(destinationStage);}catch(IOException) { }
-                try { if(File.Exists(stage))File.Delete(stage);Directory.Delete(stageDirectory); }catch(IOException) { }
+                // Some Office configurations keep an owned invisible instance alive after Quit.
+                // Bound teardown on this STA, and terminate only the private process we created.
+                if(process>0 && process!=source.HostProcessId)
+                {
+                    try
+                    {
+                        using(var owned=System.Diagnostics.Process.GetProcessById(process))
+                        {
+                            var cleanup=System.Diagnostics.Stopwatch.StartNew();
+                            while(!owned.HasExited && cleanup.ElapsedMilliseconds<2000){System.Windows.Forms.Application.DoEvents();Thread.Sleep(10);}
+                            if(!owned.HasExited){owned.Kill();owned.WaitForExit(2000);stages.Add("owned-process cleanup");}
+                        }
+                    }
+                    catch(ArgumentException){}catch(InvalidOperationException){}
+                    LastMaskPerformance=string.Join("; ",stages);
+                }
+
             }
         }
         private static void ValidateMaskBook(dynamic book,MaskResult result,CancellationToken cancel,MaskComLifetime lifetime)
@@ -180,52 +217,23 @@ namespace SheetPilot.Excel
                 dynamic name=lifetime.Hold(names.Item(n));string id=name.Name;
                 if((id!="_xlfn.SUMIFS" && id!="_xlfn.COUNTIFS") || (string)name.RefersTo!="=#NAME?")throw new InvalidOperationException("结果包含未允许的定义名称。");
             }
-            var index=result.Output.Cells.ToDictionary(c=>c.Key);
+            var neutral=result.Output.Sheets.Select((s,n)=>new DataSheet {Name="Sheet"+(n+1)}).ToArray();
+            long seen=0;
             for(int i=1;i<=(int)sheets.Count;i++)
             {
-                dynamic sheet=lifetime.Hold(sheets[i]),all=lifetime.Hold(sheet.Cells);
+                dynamic sheet=lifetime.Hold(sheets[i]);
                 if((int)lifetime.Hold(sheet.Shapes).Count!=0 || (int)lifetime.Hold(sheet.Hyperlinks).Count!=0 || (int)lifetime.Hold(sheet.Comments).Count!=0)throw new InvalidOperationException("结果包含未允许的工作表对象。");
-                // Find is read-only and avoids expected SpecialCells errors on sheets without formulas.
-                var actualCells=new HashSet<string>();
-                var ranges=new List<object>();dynamic first=lifetime.Hold(all.Find("*",Type.Missing,-4123,2,1,1,false,Type.Missing,false));
-                if(first!=null)
+                ScanMaskSheet((object)sheet,i-1,cancel,actual=>
                 {
-                    dynamic lastRow=lifetime.Hold(all.Find("*",Type.Missing,-4123,2,1,2,false,Type.Missing,false)),lastColumn=lifetime.Hold(all.Find("*",Type.Missing,-4123,2,2,2,false,Type.Missing,false));
-                    int top=first.Row,bottom=lastRow.Row,right=lastColumn.Column;
-                    if((long)(bottom-top+1)*right<=8000000)ranges.Add((object)lifetime.Hold(sheet.Range[lifetime.Hold(all[top,1]),lifetime.Hold(all[bottom,right])]));
-                    else
-                    {
-                        dynamic cursor=first;string initial=cursor.Address;
-                        do {cancel.ThrowIfCancellationRequested();ranges.Add((object)cursor);if(ranges.Count>result.Output.Cells.Count)throw new InvalidOperationException("输出出现非预期数据。");cursor=lifetime.Hold(all.Find("*",cursor,-4123,2,1,1,false,Type.Missing,false));}while(cursor!=null && (string)cursor.Address!=initial);
-                    }
-                }
-                foreach(dynamic region in ranges)
-                {
-                        int rows=lifetime.Hold(region.Rows).Count,cols=lifetime.Hold(region.Columns).Count,r0=region.Row,c0=region.Column;
-                        int step=Math.Max(1,16384/cols);
-                        for(int offset=0;offset<rows;offset+=step)
-                        {
-                            int nr=Math.Min(step,rows-offset);dynamic block=lifetime.Hold(sheet.Range[lifetime.Hold(all[r0+offset,c0]),lifetime.Hold(all[r0+offset+nr-1,c0+cols-1])]);
-                            object raw=block.Value2;var values=raw as object[,];
-                            for(int r=1;r<=nr;r++)for(int c=1;c<=cols;c++)
-                            {
-                                cancel.ThrowIfCancellationRequested();string key=(i-1)+":"+(r+r0+offset-1)+":"+(c+c0-1);object actual=values==null?raw:values[r,c];
-                                if(actual==null)continue;actualCells.Add(key);
-                                if(!index.TryGetValue(key,out var expected))throw new InvalidOperationException("输出出现非预期数据。");
-                                object wanted=expected.Formula==null?expected.Value:result.Calculated[key];
-                                if(!MaskPlanner.Equivalent(wanted,actual))throw new InvalidOperationException(expected.Location+"：Excel 重算／保存后验证不一致，未导出。");
-                                if(expected.Formula!=null)
-                                {
-                                    var neutral=result.Output.Sheets.Select((s,n)=>new DataSheet {Name="Sheet"+(n+1)}).ToArray();
-                                    if(SafeFormula.Rewrite((string)lifetime.Hold(all[r+r0+offset-1,c+c0-1]).Formula,neutral,new Dictionary<string,string>())!=expected.Formula)throw new InvalidOperationException(expected.Location+"：公式保存后改变。");
-                                }
-                            }
-                        }
-                }
-                foreach(var expected in result.Output.Cells.Where(c=>c.Sheet==i-1 && (c.Value!=null || c.Formula!=null)))
-                    if(!actualCells.Contains(expected.Key) && !MaskPlanner.Equivalent(expected.Formula==null?expected.Value:result.Calculated[expected.Key],null))throw new InvalidOperationException(expected.Location+"：输出缺少数据。");
-
+                    var expected=FindMaskCell(result.Output.Cells,actual);
+                    if(expected==null)throw new InvalidOperationException("输出出现非预期数据。");
+                    object wanted=expected.Formula==null?expected.Value:result.Calculated[expected.Key];
+                    if(!MaskPlanner.Equivalent(wanted,actual.Value))throw new InvalidOperationException(expected.Location+"：Excel 重算／保存后验证不一致，未导出。");
+                    if((expected.Formula==null)!=(actual.Formula==null) || (actual.Formula!=null && SafeFormula.Rewrite(actual.Formula,neutral,new Dictionary<string,string>())!=expected.Formula))throw new InvalidOperationException(expected.Location+"：公式保存后改变。");
+                    seen++;
+                },null,lifetime);
             }
+            if(seen!=result.Output.Cells.Count)throw new InvalidOperationException("输出单元格数量不一致，未交付不完整结果。");
         }
         private static void CleanMaskMetadata(string path)
         {

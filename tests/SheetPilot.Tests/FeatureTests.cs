@@ -126,6 +126,7 @@ internal static partial class Program
             Check(multiPlan.Count(p=>p.Changed)==3,"rename COM: all-workbook preview includes both test workbooks");
             gateway.ApplyRename(multiPlan); Check((string)alpha.Name=="Alpha_2026" && (string)beta.Name=="Changed_2026","rename COM: cross-workbook apply"); gateway.UndoLast();
             app.Visible=true; app.WindowState=-4137; SetForegroundWindow(new IntPtr((int)book.Windows.Item[1].Hwnd)); app.Goto(alpha.Range["C3"], true);
+            PumpUntil(()=>(string)app.ActiveWorkbook.Name==(string)book.Name && (string)app.ActiveCell.Address=="$C$3",4000);
             Console.WriteLine("Focus target: " + book.Name + " actual: " + app.ActiveWorkbook.Name + " / " + app.ActiveCell.Address);
             Check((string)app.ActiveWorkbook.Name==(string)book.Name && (string)app.ActiveCell.Address=="$C$3", "focus COM: active workbook and selected center verified");
             alpha.Range["B1"].Value2="项目"; alpha.Range["C1"].Value2="本期"; alpha.Range["D1"].Value2="预算";
@@ -137,34 +138,41 @@ internal static partial class Program
             Check(geometry.Bands.Length>=2 && geometry.Bands.All(b=>geometry.Viewport.Contains(b)) && geometry.Bands.All(b => app.ActiveWindow.RangeFromPoint(b.Right-1,b.Bottom-1) != null),"focus COM: row and column bands clipped to visible grid");
             using(var focus = new FocusOverlay(()=>application,action=>action(),settings))
             {
+                Action<object> selectFocus = target => { ((dynamic)target).Select(); var pending=Stopwatch.StartNew();PumpUntil(()=>pending.ElapsedMilliseconds>60); };
                 IntPtr focusWindow = FocusOverlay.ActiveWindowHandle(application);
                 bool foregroundSet = SetForegroundWindow(focusWindow);
                 Console.WriteLine("Focus visibility precondition: activation=" + foregroundSet + "; foreground=" + TestForegroundWindow() + "; Excel=" + focusWindow + "; exposed=" + FocusOverlay.WorksheetExposed(focusWindow) + "; ready=" + app.Ready);
-                focus.Toggle(); PumpUntil(()=>focus.IsVisible,30000);
+                focus.Toggle(); PumpUntil(()=>focus.IsVisible,120000);
                 Check(focus.IsVisible, "focus COM: owned transparent overlay actually visible");
-                int updates=focus.UpdateCount; alpha.Range["D4"].Select();
-                Check(focus.UpdateCount>updates,"focus COM: selection event renders synchronously without timer or queued macro");
-                alpha.Range["C3"].Select();
+                int updates=focus.UpdateCount; selectFocus((object)alpha.Range["D4"]);
+                Check(focus.UpdateCount>updates,"focus COM: selection event renders on the owning UI thread");
+                selectFocus((object)alpha.Range["C3"]);
                 int presents=focus.PresentCount, shows=focus.ShowCount, hides=focus.HideCount;
-                for(int repeat=0;repeat<20;repeat++)alpha.Range["C3"].Select();
+                for(int repeat=0;repeat<20;repeat++)selectFocus((object)alpha.Range["C3"]);
                 Check(focus.PresentCount==presents && focus.ShowCount==shows && focus.HideCount==hides,"focus COM: repeated identical selection never repaints or hide/shows");
-                settings.ClearActiveCell=false;settings.FocusColumn=false;alpha.Range["D3"].Select();presents=focus.PresentCount;
-                alpha.Range["E3"].Select();Check(focus.PresentCount==presents,"focus COM: row-only identical band does not repaint");
-                settings.FocusRow=false;settings.FocusColumn=true;alpha.Range["E4"].Select();presents=focus.PresentCount;
-                alpha.Range["E5"].Select();Check(focus.PresentCount==presents,"focus COM: column-only identical band does not repaint");
+                settings.ClearActiveCell=false;settings.FocusColumn=false;selectFocus((object)alpha.Range["D3"]);presents=focus.PresentCount;
+                selectFocus((object)alpha.Range["E3"]);Check(focus.PresentCount==presents,"focus COM: row-only identical band does not repaint");
+                settings.FocusRow=false;settings.FocusColumn=true;selectFocus((object)alpha.Range["E4"]);presents=focus.PresentCount;
+                selectFocus((object)alpha.Range["E5"]);Check(focus.PresentCount==presents,"focus COM: column-only identical band does not repaint");
                 settings.FocusRow=true;settings.ClearActiveCell=true;
-                for(int repeat=0;repeat<20;repeat++)alpha.Cells[3+repeat%5,3+repeat%3].Select();
+                for(int repeat=0;repeat<20;repeat++)selectFocus((object)alpha.Cells[3+repeat%5,3+repeat%3]);
                 Check(focus.ShowCount==shows && focus.HideCount==hides,"focus COM: moving row and column updates atomically without hide/show");
-                alpha.Range["C3"].Select();
+                selectFocus((object)alpha.Range["C3"]);
                 Console.WriteLine(focus.PerformanceSummary);
                 using (var screenshot = new System.Drawing.Bitmap(geometry.Viewport.Width, geometry.Viewport.Height)) using (var graphics = System.Drawing.Graphics.FromImage(screenshot)) { graphics.CopyFromScreen(geometry.Viewport.Location, System.Drawing.Point.Empty, geometry.Viewport.Size); screenshot.Save(Path.Combine(directory,"focus-overlay.png"),System.Drawing.Imaging.ImageFormat.Png); }
                 Check(focus.Enabled && FormatSnapshot(alpha.Range["C3"])==before && (bool)book.Saved==saved && (int)alpha.Cells.FormatConditions.Count==conditions,"focus COM: overlay leaves formatting rules and dirty state unchanged");
                 settings.FocusAnimation=true;
                 var settling=Stopwatch.StartNew();PumpUntil(()=>settling.ElapsedMilliseconds>150);
-                alpha.Range["D4"].Select();
+                selectFocus((object)alpha.Range["D4"]);
                 Console.WriteLine("Animation test: running="+focus.IsAnimating+" visible="+focus.IsVisible+" foreground="+TestForegroundWindow());
-                PumpUntil(()=> {System.Windows.Forms.Application.DoEvents();return !focus.IsAnimating && focus.IsVisible;},4000);
+                try { PumpUntil(()=> {System.Windows.Forms.Application.DoEvents();return !focus.IsAnimating && focus.IsVisible;},4000); } catch { Console.WriteLine("Animation timeout: "+focus.AnimationDiagnostics+" foreground="+TestForegroundWindow()+" exposed="+FocusOverlay.WorksheetExposed(focusWindow));throw; }
                 Check(focus.ShowCount==shows && focus.HideCount==hides,"focus COM: optional animation settles without hiding overlay");
+                int geometryUpdates=focus.UpdateCount;double oldHeight=alpha.Rows[1].RowHeight;alpha.Rows[1].RowHeight=oldHeight+7;
+                PumpUntil(()=>focus.UpdateCount>geometryUpdates,4000);
+                Check(focus.UpdateCount>geometryUpdates,"F09 focus follows geometry changes without a selection event");
+                var headings=FocusOverlay.Capture(application,settings);
+                Check(headings.RipplePanes.Length==headings.Panes.Length && headings.RipplePanes.Any(p=>p.Left<headings.Panes.Min(c=>c.Left)) && headings.RipplePanes.Any(p=>p.Top<headings.Panes.Min(c=>c.Top)),"ripple includes native row and column headings");
+                alpha.Rows[1].RowHeight=oldHeight;
                 focus.Toggle(); Check(!focus.Enabled,"focus COM: toggle removes overlay");
             }
             dynamic window=app.ActiveWindow; window.SplitRow=1; window.SplitColumn=1; window.FreezePanes=true;

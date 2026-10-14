@@ -132,6 +132,8 @@ internal static partial class Program
             book.Activate(); sheet.Activate(); sheet.Range["B2:D6"].Select();
             result = gateway.CopySelection(false, new CopyOptions { CellFormats = false, NumberFormats = true, MergedCells = true, Notes = false, RowHeights = false, ColumnWidths = false, KeepSourceActive = true }); copied = result.Workbook; output = copied.Worksheets.Item[1];
             Check((string)output.Range["B2"].NumberFormat == "0.00%" && (bool)output.Range["B5"].MergeCells && output.Range["B2"].Comment == null, "independent number format merge and notes options");
+            PumpUntil(()=>(string)app.ActiveWorkbook.Name==(string)book.Name,2000);
+            Console.WriteLine("COPY active="+app.ActiveWorkbook.Name+" source="+book.Name+" height="+output.Rows[2].RowHeight+" standard="+output.StandardHeight);
             Check((string)app.ActiveWorkbook.Name == (string)book.Name && (double)output.Rows[2].RowHeight != 35, "keep source active and disable row height"); copied.Close(false);
             sheet.Range["B2:D6"].Select(); result = gateway.CopySelection(false, new CopyOptions { MergedCells = false, NumberFormats = false }); copied = result.Workbook; output = copied.Worksheets.Item[1];
             Check(!(bool)output.Range["B5"].MergeCells && (string)output.Range["B2"].NumberFormat == "General", "disable merge and number format independently"); copied.Close(false);

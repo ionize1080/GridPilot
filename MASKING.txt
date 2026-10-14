@@ -1,7 +1,9 @@
-﻿v0.9 masking changes (supersedes conflicting historical limits below)
+GridPilot 1.0 masking — current behavior
 
-Content limits: 2,000,000 cells for x64 Excel; 500,000 for x86 Excel. Formatting-only
-cells do not count. No 512-column cap. Formula evaluator range limits still apply.
+No fixed 500,000 / 2,000,000 content-cell cap. Adaptive blocks cover the full Excel grid
+and skip empty regions. Formatting-only cells do not count. Memory headroom is enforced;
+32-bit hosts have less capacity. Single formula ranges allow up to 8,000,000 cells, with
+separate evaluation/depth budgets. Unsupported formulas fail rather than truncate output.
 Header inference examines the first 40 content rows, including merged hierarchy.
 Heuristics are suggestions, not proof: correct header/data start, grouping and kinds
 before export. Money/date/classification fields remain opt-in.
@@ -14,62 +16,38 @@ Formatting retention is optional, enabled by default in new settings. It preserv
 basic cell fonts/fills/borders/number formats, dimensions, hidden rows/columns and merges.
 Conditional formatting rules and their dynamic display effects are not preserved.
 Source styles are transferred without source values, worksheet objects or relationships.
-Matching identity literals in style attributes are replaced. Other static text in
+Structural style indices and colors are never text-replaced. Sensitive custom number
+formats fall back to General. Style rows are merged incrementally. Other static text in
 custom formats/theme metadata may remain and must be reviewed when sharing externally.
 Output worksheet names remain neutral Sheet1, Sheet2 etc. Hidden source worksheets are
 included as visible output worksheets for inspection, as in v0.8.
 Source workbook is not edited; private temporary snapshots are removed on normal exit.
 Source changes after preview reject export. Existing destination files are never overwritten.
 
-Historical v0.8 details:
 
-GridPilot 0.8 — 关系保持脱敏
-==========================
+Affixes: frequency/structure inference samples up to 2,000 values distributed through
+each column. Review inferred suffixes, label prefixes and identifier year segments.
+Edit Prefix/Suffix/Digits; names permit 0-18 digits, identifiers require 1-18.
+Natural-person mode produces short Chinese names. All rules in one domain synchronize.
+Identity allocation rejects original substrings and duplicate replacements. Too small
+a random space fails with an instruction to increase digits or revise affixes.
 
-先打开源工作簿并完成计算，点击「GridPilot → 数据脱敏」。默认全部保留。
-双击“规则”选择中文假名、英文假名、模拟编号、金额缩放或日期平移。
-在不同表的对应列填写相同“逻辑字段”，例如客户名称、借款人名称均填“客户”。
-同一逻辑字段必须使用相同规则与参数。映射按文本匹配，忽略英文字母大小写；
-不会自动把简称、曾用名或不同客户合并。编号必须是文本，前导零不会被去掉。
-默认把每列首个非空值作为表头；无表头时务必修改“起始行”。
+Preview shows 60 changes; export processes all cells. Scan displays processed count;
+known-size phases show phase percentage. Close/cancel prevents commit. An active Office
+COM call must return before cancellation can finish. Private Excel runs on its own STA;
+source access and final verification stay on the host STA. A private process that
+remains after Quit receives bounded cleanup. Existing user Excel is never terminated.
 
-点击“分析与预览”，检查最多12条替换样例。规则不变时，导出使用相同映射。
-选择新的 .xlsx 路径。程序重新确认源数据未变化，在独立 Excel 实例中生成，
-重算、保存、重新打开并复核后才交付文件。不覆盖已有文件，不改写或保存源表。
-预览映射只在窗口存活期间保存在内存中，关闭后不保留；不支持跨月映射复用。
+Supported formulas: A1 references, bounded and restricted whole-column ranges, same-
+and cross-sheet references, arithmetic (+ - * / %), comparisons, IF, SUM, COUNT,
+AVERAGE, MIN, MAX, AND, OR, NOT, SUMIF(S), COUNTIF(S), exact VLOOKUP/MATCH and INDEX.
+Unknown functions, names, external links, dynamic/array formulas, structured references,
+whole-row references, wildcard lookup, concatenation and exponentiation are rejected.
+Formula identity results must be mapped; date rules validate both original and shifted
+serials, including Excel's fictitious 1900 leap day. Amount/date rules remain opt-in.
+Validation concerns current data, not arbitrary future workbook inputs.
 
-输出范围
---------
-输出每张普通工作表的数据及受支持公式，包含隐藏与 VeryHidden 表的数据；
-结果全部可见，工作表名统一为 Sheet1、Sheet2 等，单元格位置保持。
-不复制源格式、富文本、合并、批注、图片、图表、数据验证、名称、外链、连接、宏。
-日期平移列使用统一日期时间显示，其他列使用普通格式。
-输出并非原工作簿的排版副本。需要保留排版的非脱敏复制请使用“原样复制”。
-
-身份、金额与日期
---------------
-中文、英文假名用于模拟实体，模拟编号带 TEST 前缀，不是真实统一社会信用代码。
-金额乘以同一正系数（0至1000之间，不等于1）；相关金额公式列也须设置同一规则。
-日期按同一天数整体平移（非零，最多36500天），保持日差，不保证月份、季度、
-工作日、节假日或业务分类不变。1900年虚构闰日及超出日期范围的数据会拒绝。
-分类、绿色贷款指标等应保持原值；如果分类由公式决定，会检查条件分支是否改变。
-正数缩放本身会保留比例等信息，不能视为不可逆匿名化。请检查需要保留的字段。
-
-可验证的公式
-------------
-支持普通 A1 单元格/有界范围、同表及跨表引用、加减乘除、百分号、比较，
-以及 IF、SUM、COUNT、AVERAGE、MIN、MAX、AND、OR、NOT、SUMIF(S)、COUNTIF(S)、
-精确 VLOOKUP（FALSE）、一维精确 MATCH（0）、INDEX 的受限用法。
-会检查源缓存与验证结果一致、查找命中行/条件汇总记录/分支不变，并验证输出值
-符合保留、身份映射、所选金额系数或日期偏移规则；再使用实际 Excel 重算复核。
-这验证的是当前数据，不是对未来所有输入的数学证明。
-
-名称、结构化/数组/动态公式、外部工作簿引用、整行整列引用、模糊查找、通配符、
-字符串拼接、幂运算以及其他未知语法/函数会停止导出。支持函数的复杂类型转换
-也可能拒绝。遇到无法证明的关系时不会悄悄转为值或声称关系已保持。
-身份字段原文仍出现在保留文本、公式文字或计算结果时，导出会停止。
-
-本版上限：总计20万已使用单元格、每表512个已使用列；过于稀疏的表会拒绝。
-公式依赖/嵌套深度、总计算量及身份残留扫描另有上限；超限时请缩小工作簿。
-“取消分析”取消本地规则计算；独立 Excel 写入和重算期间需等待该阶段返回。
-复杂工作簿、跨期映射、复合身份键、别名归并及完整业务约束求解不在0.8范围内。
+Mapping lasts for the current window only. No persistent cross-period encrypted map.
+Maximum coordinates do not imply that 17 billion populated cells fit in memory.
+Temporary source copies are removed on normal completion/failure; abnormal termination
+can leave files under the current user's local GridPilot Staging directory.

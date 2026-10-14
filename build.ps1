@@ -1,4 +1,4 @@
-﻿param([string]$PackageSource, [string]$BrowserRuntime)
+param([string]$PackageSource, [string]$BrowserRuntime)
 $ErrorActionPreference = 'Stop'
 Push-Location $PSScriptRoot
 try {
@@ -16,6 +16,10 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Cold native-host color picker tests failed.' }
     & '.\tests\SheetPilot.Tests\bin\Release\net462\SheetPilot.Tests.exe' --release-features
     if ($LASTEXITCODE -ne 0) { throw 'Release feature tests failed.' }
+    foreach($suite in @('--upgrade','--v1')) {
+        & '.\tests\SheetPilot.Tests\bin\Release\net462\SheetPilot.Tests.exe' $suite
+        if ($LASTEXITCODE -ne 0) { throw "Regression tests failed: $suite" }
+    }
     New-Item -ItemType Directory -Force 'dist' | Out-Null
     Copy-Item -LiteralPath 'src\SheetPilot.Excel\bin\Release\net462\publish\SheetPilot-AddIn-packed.xll' -Destination 'dist\GridPilot-x86.xll'
     Copy-Item -LiteralPath 'src\SheetPilot.Excel\bin\Release\net462\publish\SheetPilot-AddIn64-packed.xll' -Destination 'dist\GridPilot-x64.xll'
@@ -26,7 +30,7 @@ try {
     New-Item -ItemType Directory -Force 'dist/Browser' | Out-Null
     Get-ChildItem -LiteralPath $BrowserRuntime | Copy-Item -Destination 'dist/Browser' -Recurse -Force
     Copy-Item -LiteralPath 'src\SheetPilot.Core\bin\Release\net462\Resources' -Destination 'dist' -Recurse -Force
-    foreach ($file in @('README.txt','RELEASE-v0.9.0.md','COMPATIBILITY.txt','COPYING.txt','MASKING.txt','SEGMENTATION.txt','VALIDATION.txt','FIX-COLOR-PICKER.txt','SETTINGS.txt','Check-Environment.ps1','EXCEL-DNA-LICENSE.txt','JIEBA-NET-LICENSE.txt','JIEBA-LICENSE.txt','NEWTONSOFT-JSON-LICENSE.txt','THIRD-PARTY-NOTICES.txt')) { Copy-Item -LiteralPath $file -Destination 'dist' }
+    foreach ($file in @('README.txt','RELEASE-v1.0.0.md','COMPATIBILITY.txt','COPYING.txt','MASKING.txt','SEGMENTATION.txt','VALIDATION.txt','FIX-COLOR-PICKER.txt','SETTINGS.txt','Check-Environment.ps1','EXCEL-DNA-LICENSE.txt','JIEBA-NET-LICENSE.txt','JIEBA-LICENSE.txt','NEWTONSOFT-JSON-LICENSE.txt','THIRD-PARTY-NOTICES.txt')) { Copy-Item -LiteralPath $file -Destination 'dist' }
     $packageRoot=(Resolve-Path dist).Path
     Get-ChildItem -LiteralPath $packageRoot -File -Recurse | Where-Object Name -ne 'SHA256SUMS.txt' | Sort-Object FullName | Get-FileHash -Algorithm SHA256 | ForEach-Object { $_.Hash + '  ' + $_.Path.Substring($packageRoot.Length+1).Replace('\','/') } | Set-Content 'dist\SHA256SUMS.txt' -Encoding ASCII
     Write-Host 'Portable add-ins are ready in dist/.'

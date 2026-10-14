@@ -1,3 +1,7 @@
+v1.0：global.json固定已验证的.NET SDK 8.0.206（允许同系列补丁）。
+新增 --v1 与 --v1 --excel --large；tests/browser-v1.cjs 检查连续保存、前后缀同步、取消保存及进度。
+build.ps1已强制运行--upgrade与--v1。
+
 构建 GridPilot
 ===============
 
