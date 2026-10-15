@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -11,6 +11,10 @@ namespace SheetPilot.Core
 {
     public sealed class SimpleMaskOptions
     {
+        public string HeaderMode { get; set; } = "auto";
+        public string HeaderRows { get; set; } = "";
+        public bool MaskHeaders { get; set; }
+        public bool PreservePreamble { get; set; }
         public string Mode { get; set; } = "initials";
         public string Prefix { get; set; } = "";
         public string Suffix { get; set; } = "";
@@ -30,6 +34,10 @@ namespace SheetPilot.Core
         public string After { get; set; }
         public string Skip { get; set; }
         public string WriteStatus { get; set; }
+        public string Role { get; set; }
+        public bool Retained { get; set; }
+        public string MergeAddress { get; set; }
+        public bool MergeSelectedFull { get; set; }
         public string NumberFormat { get; set; }
     }
     public sealed class SimpleMaskBlock
@@ -42,6 +50,11 @@ namespace SheetPilot.Core
     }
     public sealed class SimpleMaskSnapshot
     {
+        public List<HeaderProbeCell> HeaderContext { get; set; } = new List<HeaderProbeCell>();
+        public List<HeaderMerge> HeaderMerges { get; set; } = new List<HeaderMerge>();
+        public List<SimpleHeaderBand> NativeHeaders { get; set; } = new List<SimpleHeaderBand>();
+        public bool HeaderContextLimited { get; set; }
+        public string HeaderReadWarning { get; set; }
         public string BookKey { get; set; }
         public string SheetKey { get; set; }
         public string BookName { get; set; }
@@ -51,11 +64,13 @@ namespace SheetPilot.Core
     }
     public sealed class SimpleMaskResult
     {
+        public SimpleHeaderAnalysis Headers { get; set; }
+        public int Retained => Cells.Count(c=>c.Retained);
         public SimpleMaskOptions Options { get; set; }
         public List<SimpleMaskCell> Cells { get; set; } = new List<SimpleMaskCell>();
         public int Changed => Cells.Count(c=>c.Skip==null && c.After!=SimpleMask.Text(c.Before));
         public int Skipped => Cells.Count(c=>c.Skip!=null);
-        public string Summary => "读取 "+Cells.Count+" 格 · 变更 "+Changed+" 格 · 跳过 "+Skipped+" 格。复制和导出中的跳过项留空。";
+        public string Summary => "读取 "+Cells.Count+" 格 · 变更 "+Changed+" 格 · 保留 "+Retained+" 格 · 跳过 "+Skipped+" 格。复制和导出中的跳过项留空。";
     }
     public static class SimpleMask
     {
@@ -74,6 +89,8 @@ namespace SheetPilot.Core
         public static void Validate(SimpleMaskOptions o)
         {
             if(o==null || !new[]{"initials","swap","reverse","regex","number"}.Contains(o.Mode))throw new InvalidOperationException("请选择有效的脱敏方式。");
+            if(!new[]{"auto","manual","off"}.Contains(o.HeaderMode))throw new InvalidOperationException("请选择有效的表头识别方式。");
+            if(o.HeaderMode=="manual")SimpleHeaderDetector.ParseRows(o.HeaderRows);
             if((o.Prefix??"").Length>256 || (o.Suffix??"").Length>256)throw new InvalidOperationException("前后缀各最多 256 个字符。");
             if(o.Mode=="swap" && (o.EdgeCount<1||o.EdgeCount>1000))throw new InvalidOperationException("首尾交换长度应为 1–1000。");
             if(o.Mode=="regex")
@@ -103,12 +120,15 @@ namespace SheetPilot.Core
         }
         public static SimpleMaskResult Build(SimpleMaskSnapshot source,SimpleMaskOptions options,CancellationToken token,Action<int,int> progress=null)
         {
-            Validate(options);var result=new SimpleMaskResult{Options=options};int timeouts=0;
+            Validate(options);var result=new SimpleMaskResult{Options=options,Headers=SimpleHeaderDetector.Analyze(source,options,token)};int timeouts=0;
             Regex regex=options.Mode=="regex"?new Regex(options.Pattern,RegexOptions.CultureInvariant,TimeSpan.FromMilliseconds(50)):null;
             for(int i=0;i<source.Cells.Count;i++)
             {
-                token.ThrowIfCancellationRequested();var c=source.Cells[i];var item=new SimpleMaskCell{Block=c.Block,Row=c.Row,Column=c.Column,Address=c.Address,Before=c.Before,Skip=c.Skip,NumberFormat=c.NumberFormat};
-                if(item.Skip==null)
+                token.ThrowIfCancellationRequested();var c=source.Cells[i];var item=new SimpleMaskCell{Block=c.Block,Row=c.Row,Column=c.Column,Address=c.Address,Before=c.Before,Skip=c.Skip,NumberFormat=c.NumberFormat,MergeAddress=c.MergeAddress,MergeSelectedFull=c.MergeSelectedFull,Role=result.Headers.Role(c.Row,c.Column)};
+                bool retain=item.Role=="header"&&!options.MaskHeaders||item.Role=="preamble"&&options.PreservePreamble;
+                if(item.Skip=="合并单元格"&&(retain||c.MergeSelectedFull&&item.Role!="data"))item.Skip=null;
+                if(item.Skip==null&&retain){item.After=Text(c.Before);item.Retained=true;}
+                if(item.Skip==null&&!item.Retained)
                 {
                     if(timeouts>=10)item.Skip="正则累计超时，已跳过剩余项；请简化表达式";
                     else try{item.After=Transform(c.Before,options,regex);}

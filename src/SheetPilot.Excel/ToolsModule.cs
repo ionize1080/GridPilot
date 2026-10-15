@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -136,7 +136,7 @@ namespace SheetPilot.Excel
                     {
                         snapshot=null;result=null;fingerprint=null;applied=false;
                         snapshot=gateway.CaptureSimpleMask(token,progress);
-                        return new {mode="simple",book=snapshot.BookName,sheet=snapshot.SheetName,count=snapshot.Cells.Count,blocks=snapshot.Blocks,mappingVersion=SimpleMask.MappingVersion,letters=SimpleMask.Letters,digits=SimpleMask.Digits};
+                        return new {mode="simple",book=snapshot.BookName,sheet=snapshot.SheetName,count=snapshot.Cells.Count,blocks=snapshot.Blocks,headers=SimpleHeaderDetector.Analyze(snapshot,new SimpleMaskOptions(),token),mappingVersion=SimpleMask.MappingVersion,letters=SimpleMask.Letters,digits=SimpleMask.Digits};
                     }
                     if(snapshot==null)throw new InvalidOperationException("请先读取选区。");
                     if(!new[]{"simplePreview","simplePage","simpleCopy","simpleExport","simpleApply","simpleRecovery"}.Contains(action))throw new InvalidOperationException("未知操作。");
@@ -151,7 +151,7 @@ namespace SheetPilot.Excel
                     {
                         string search=(string)message["search"]??"";var rows=result.Cells.Where(c=>search.Length==0||new[]{c.Address,SimpleMask.Text(c.Before),c.After??"",c.Skip??"",c.WriteStatus??""}.Any(v=>v.IndexOf(search,StringComparison.OrdinalIgnoreCase)>=0)).ToArray();
                         int offset=Math.Max(0,Math.Min((int?)message["offset"]??0,Math.Max(0,rows.Length-1)));
-                        return new {summary=result.Summary,changed=result.Changed,skipped=result.Skipped,total=rows.Length,offset,rows=rows.Skip(offset).Take(100).Select(c=>new{address=c.Address,before=SimpleMask.Text(c.Before),after=c.After,status=c.WriteStatus??c.Skip??(c.After==SimpleMask.Text(c.Before)?"未变化":"可处理")})};
+                        return new {headers=result.Headers,summary=result.Summary,changed=result.Changed,skipped=result.Skipped,total=rows.Length,offset,rows=rows.Skip(offset).Take(100).Select(c=>new{address=c.Address,before=SimpleMask.Text(c.Before),after=c.After,status=c.Skip??(c.Retained?(c.Role=="header"?"表头 · 保留":"标题/前置信息 · 保留"):c.WriteStatus)??(c.After==SimpleMask.Text(c.Before)?"未变化":"可处理")})};
                     }
                     if((bool?)message["confirmed"]!=true)throw new InvalidOperationException("请先检查预览并确认。");
                     if(action=="simpleCopy")

@@ -1,4 +1,4 @@
-GridPilot 1.2.0 portable
+﻿GridPilot 1.3.0 portable
 
 1. Fully extract the ZIP on 64-bit Windows 10/11. No installer and no WebView2 dependency.
 2. Choose GridPilot-x86.xll for 32-bit Excel, or GridPilot-x64.xll for 64-bit Excel.
@@ -12,7 +12,8 @@ Temporary browser profile is removed on normal exit. Abnormal termination may le
 GridPilot-ui-* folder in TEMP; workbook snapshots are not written there.
 
 Simple masking (Ribbon: 简易脱敏) supports selected ranges/rows/columns, fixed initials,
-character swaps, regex and numeric arithmetic. Preview before copying/exporting.
+character swaps, regex and numeric arithmetic. Headers are detected and retained by default;
+review detection or specify header rows manually. Preview before copying/exporting.
 In-place changes require backup confirmation and support Undo. Recovery JSON contains
 original sensitive values: keep it separate. See SIMPLE-MASKING.txt for limits.
 
@@ -22,5 +23,5 @@ preserved, including merged cells. Conditional formatting rules, shapes, notes, 
 external links, names and connections are not copied.
 
 Tested here: Windows 11 + Excel 16 x64. Target Windows 10 21H1 + Excel 2010 has NOT been
-verified on a real machine. See RELEASE-v1.2.0.md and VALIDATION.txt for exact coverage.
+verified on a real machine. See RELEASE-v1.3.0.md and VALIDATION.txt for exact coverage.
 Portable does not bypass Office trust policies or enterprise execution restrictions.

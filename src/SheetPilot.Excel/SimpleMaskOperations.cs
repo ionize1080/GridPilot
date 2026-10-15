@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -53,11 +53,17 @@ namespace SheetPilot.Excel
                                 if(value==null&&!formula)continue;
                                 c.NumberFormat=format as string??(string)cell.NumberFormat;
                                 if(formula)c.Skip="公式";
-                                else if(merged is bool m?m:(bool)cell.MergeCells)c.Skip="合并单元格";
                                 else if(value is ErrorWrapper || value is int)c.Skip="Excel 错误值";
                                 else if(value is bool)c.Skip="布尔值";
                                 else if(string.IsNullOrWhiteSpace(SimpleMask.Text(value)))c.Skip="空白";
                                 else if(type==0&&(locked is bool l?l:(bool)cell.Locked))c.Skip="受保护单元格";
+                                else if(merged is bool m?m:(bool)cell.MergeCells)
+                                {
+                                    c.Skip="合并单元格";dynamic merge=sheet.Range[address].MergeArea;
+                                    c.MergeAddress=(string)merge.Address;
+                                    dynamic selectedMerge=app.Intersect(area,merge);
+                                    c.MergeSelectedFull=selectedMerge!=null&&Convert.ToDouble(selectedMerge.CountLarge)==Convert.ToDouble(merge.CountLarge);
+                                }
                             }
                             catch(COMException){c.Skip="读取失败";c.Before=null;}
                             blockCells.Add(c);read++;if(read%128==0)progress?.Invoke("读取选区，可取消",0,read,0);
@@ -68,7 +74,48 @@ namespace SheetPilot.Excel
                 int top=blockCells.Min(c=>c.Row),left=blockCells.Min(c=>c.Column),bottom=blockCells.Max(c=>c.Row),right=blockCells.Max(c=>c.Column);
                 snapshot.Blocks.Add(new SimpleMaskBlock{Address=(string)area.Address,Row=top,Column=left,Rows=bottom-top+1,Columns=right-left+1});snapshot.Cells.AddRange(blockCells.OrderBy(c=>c.Row).ThenBy(c=>c.Column));
             }
+            try{CaptureSimpleHeaderContext(sheet,snapshot,token);}
+            catch(COMException){snapshot.HeaderContext.Clear();snapshot.HeaderMerges.Clear();snapshot.NativeHeaders.Clear();snapshot.HeaderReadWarning="Excel 未能读取表头上下文。请手动指定表头行；自动保留已停用，选区仍可处理。";}
             progress?.Invoke("读取完成",100,read,read);return snapshot;
+        }
+        private static void CaptureSimpleHeaderContext(dynamic sheet,SimpleMaskSnapshot snapshot,CancellationToken token)
+        {
+            dynamic used=sheet.UsedRange;int top=(int)used.Row,left=(int)used.Column;
+            int rows=Math.Min(80,(int)used.Rows.Count),cols=Math.Min(256,(int)used.Columns.Count);
+            snapshot.HeaderContextLimited=(int)used.Rows.Count>rows||(int)used.Columns.Count>cols;
+            var seen=new HashSet<string>();var merges=new HashSet<string>();
+            Action<int,int,int,int> read=(r,c,h,w)=>
+            {
+                dynamic range=sheet.Range[sheet.Cells[r,c],sheet.Cells[r+h-1,c+w-1]];
+                object raw=range.Value2;var values=raw as object[,];
+                for(int y=0;y<h;y++)
+                {
+                    token.ThrowIfCancellationRequested();dynamic line=range.Rows[y+1];
+                    object merged=line.MergeCells,formula=line.HasFormula,bold=line.Font.Bold,format=line.NumberFormat;
+                    for(int x=0;x<w;x++)
+                    {
+                        object value=values==null?raw:values[y+1,x+1];if(value==null)continue;
+                        string key=DataCell.Address(r+y,c+x);if(!seen.Add(key))continue;
+                        dynamic cell=null;if(!Equals(merged,false)||!(formula is bool)||!(bold is bool)||!(format is string))cell=sheet.Cells[r+y,c+x];
+                        snapshot.HeaderContext.Add(new HeaderProbeCell{Row=r+y,Column=c+x,Value=value,Formula=formula is bool f?f:(bool)cell.HasFormula,Bold=bold is bool b?b:Equals((object)cell.Font.Bold,true),Style=format as string??SimpleMask.Text((object)cell.NumberFormat)});
+                        if(!Equals(merged,false)&&(bool)cell.MergeCells)
+                        {dynamic merge=cell.MergeArea;if(merges.Add((string)merge.Address))snapshot.HeaderMerges.Add(new HeaderMerge{Row=(int)merge.Row,Column=(int)merge.Column,Rows=(int)merge.Rows.Count,Columns=(int)merge.Columns.Count});}
+                    }
+                }
+            };
+            read(top,left,rows,cols);
+            for(int i=1;i<=(int)sheet.ListObjects.Count;i++)
+            {
+                token.ThrowIfCancellationRequested();dynamic table=sheet.ListObjects[i];if(!(bool)table.ShowHeaders)continue;
+                dynamic header=table.HeaderRowRange;if(header==null)continue;
+                int r=(int)header.Row,c=(int)header.Column,w=(int)header.Columns.Count;
+                snapshot.NativeHeaders.Add(new SimpleHeaderBand{StartRow=r,EndRow=r,FirstColumn=c,LastColumn=c+w-1});read(r,c,1,w);
+            }
+        }
+        private static bool SimpleMergeChanged(dynamic cell,SimpleMaskCell c)
+        {
+            bool merged=(bool)cell.MergeCells;
+            return c.MergeAddress==null?merged:!merged||!c.MergeSelectedFull||(string)cell.MergeArea.Address!=c.MergeAddress;
         }
         public string ApplySimpleMask(SimpleMaskSnapshot source,SimpleMaskResult result,bool backupConfirmed,CancellationToken token,Action<string,int,long,long> progress=null)
         {
@@ -89,7 +136,7 @@ namespace SheetPilot.Excel
                     try
                     {
                         cell=sheet.Range[c.Address];
-                        if((bool)cell.HasFormula||(bool)cell.MergeCells||((bool)sheet.ProtectContents&&(bool)cell.Locked))throw new InvalidOperationException("公式、合并或保护状态已改变");
+                        if((bool)cell.HasFormula||SimpleMergeChanged(cell,c)||((bool)sheet.ProtectContents&&(bool)cell.Locked))throw new InvalidOperationException("公式、合并或保护状态已改变");
                         if(!Equals((object)cell.Value2,c.Before)||!Equals((string)cell.NumberFormat,c.NumberFormat))throw new InvalidOperationException("预览后单元格已改变");
                         started=true;cell.NumberFormat="@";cell.Value2=c.After;
                         if((bool)cell.HasFormula||!SimpleMaskValueEquals((object)cell.Value2,c.After))throw new InvalidOperationException("写入验证失败");
@@ -119,7 +166,7 @@ namespace SheetPilot.Excel
             CheckThread();dynamic app=application(),book=FindBook(source.BookKey),sheet=FindPage(book,source.SheetKey);
             if((bool)book.ReadOnly || ((int)book.Windows.Count>0&&(int)book.Windows[1].SelectedSheets.Count>1))throw new InvalidOperationException("请取消工作表组合并确认工作簿可写。");
             // Verify every target before the first restoration to avoid overwriting intervening edits.
-            foreach(var c in changes){dynamic cell=sheet.Range[c.Address];if((bool)cell.HasFormula||(bool)cell.MergeCells||((bool)sheet.ProtectContents&&(bool)cell.Locked)||!SimpleMaskValueEquals((object)cell.Value2,c.After)||(string)cell.NumberFormat!="@")throw new InvalidOperationException("脱敏后的单元格已改变，无法自动撤销。请使用备份。");}
+            foreach(var c in changes){dynamic cell=sheet.Range[c.Address];if((bool)cell.HasFormula||SimpleMergeChanged(cell,c)||((bool)sheet.ProtectContents&&(bool)cell.Locked)||!SimpleMaskValueEquals((object)cell.Value2,c.After)||(string)cell.NumberFormat!="@")throw new InvalidOperationException("脱敏后的单元格已改变，无法自动撤销。请使用备份。");}
             bool events=app.EnableEvents;int restored=0;try{app.EnableEvents=false;foreach(var c in changes){dynamic cell=sheet.Range[c.Address];cell.NumberFormat="@";cell.Value2=c.Before;cell.NumberFormat=c.NumberFormat;restored++;}}finally{app.EnableEvents=events;}
             return "已还原 "+restored+" 格及数字格式；未自动保存。";
         }
@@ -145,7 +192,7 @@ namespace SheetPilot.Excel
         public string ExportSimpleRecovery(SimpleMaskSnapshot source,SimpleMaskResult result,string path)
         {
             path=Path.GetFullPath(path);if(Path.GetExtension(path).ToLowerInvariant()!=".json")throw new InvalidOperationException("还原记录应保存为 .json。");
-            var record=new {schema="GridPilot.SimpleMask.Recovery/1",mappingVersion=SimpleMask.MappingVersion,createdUtc=DateTime.UtcNow,source.BookName,source.SheetName,source.Blocks,options=result.Options,letters=SimpleMask.Letters,digits=SimpleMask.Digits,cells=result.Cells.Select(c=>new{c.Address,c.Block,c.Row,c.Column,beforeType=c.Before is string?"text":c.Before is double?"number":"other",c.Before,c.After,c.NumberFormat,c.Skip,c.WriteStatus})};
+            var record=new {schema="GridPilot.SimpleMask.Recovery/1",mappingVersion=SimpleMask.MappingVersion,createdUtc=DateTime.UtcNow,source.BookName,source.SheetName,source.Blocks,options=result.Options,letters=SimpleMask.Letters,digits=SimpleMask.Digits,cells=result.Cells.Select(c=>new{c.Address,c.Block,c.Row,c.Column,beforeType=c.Before is string?"text":c.Before is double?"number":"other",c.Before,c.After,c.NumberFormat,c.Skip,c.WriteStatus,c.Role,c.Retained,c.MergeAddress})};
             // CreateNew avoids replacing any user file, even if the selected path is the source workbook.
             using(var stream=new FileStream(path,FileMode.CreateNew,FileAccess.Write,FileShare.None))using(var writer=new StreamWriter(stream,new System.Text.UTF8Encoding(false)))writer.Write(JsonConvert.SerializeObject(record,Formatting.Indented));
             return path;
