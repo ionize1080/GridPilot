@@ -35,16 +35,16 @@ internal static partial class Program
         foreach(int size in new[]{16,20,24,32,48,64,96})foreach(var id in icons)using(var icon=RibbonIcons.Draw(id,size))Check(icon.Width==size&&icon.Height==size,"icon raster size "+id+" "+size);
         if(excel)V11ExcelTests();
     }
-    private static void V11Launch(string addin)
+    private static void V11Launch(string addin,string command="GridPilot_Database")
     {
         dynamic app=null;Process window=null;
         try
         {
             app=Activator.CreateInstance(Type.GetTypeFromProgID("Excel.Application",true));app.Visible=false;app.DisplayAlerts=false;app.Workbooks.Add(-4167);
             Check((bool)app.RegisterXLL(addin),"packaged XLL registration");var before=Process.GetProcessesByName("electron").Select(p=>p.Id).ToArray();
-            app.Run("GridPilot_Database");
+            app.ActiveSheet.Range["A1"].Value2="新加坡油气有限公司";app.ActiveSheet.Range["A1"].Select();app.Run(command);
             PumpUntil(()=>{window=Process.GetProcessesByName("electron").FirstOrDefault(p=>!before.Contains(p.Id)&&p.MainWindowHandle!=IntPtr.Zero&&p.MainWindowTitle=="GridPilot");return window!=null;},20000);
-            Check(window!=null,"packaged database command opens production Electron window");
+            Check(window!=null,"packaged "+command+" opens production Electron window");
             window.CloseMainWindow();PumpUntil(()=>window.HasExited,10000);Check(window.HasExited,"database window closes and named pipe disconnects cleanly");
         }
         finally{if(window!=null){try{if(!window.HasExited)window.CloseMainWindow();}catch{}window.Dispose();}if(app!=null){try{app.Quit();}catch{}System.Runtime.InteropServices.Marshal.ReleaseComObject(app);}}

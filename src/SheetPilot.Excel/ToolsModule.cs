@@ -44,6 +44,7 @@ namespace SheetPilot.Excel
         internal string PerformanceSummary => focus?.PerformanceSummary ?? "Focus not started";
         public IEnumerable<FeatureCommand> Commands => new[] {
             new FeatureCommand("GridPilot_Database", "报表数据库", "文件夹报表归档、快照与累计去重、可视化和 SQL 查询；在源 Excel 修改后扫描更新。", "", () => Run(OpenDatabase)),
+            new FeatureCommand("GridPilot_SimpleMask", "简易脱敏", "选区拼音首字母、固定字符映射、首尾交换、正则和数字运算；预览后复制、导出或写回原表。", "", () => Run(OpenSimpleMask)),
             new FeatureCommand("GridPilot_Mask", "数据脱敏", "选择字段、统一跨表映射；验证支持的公式关系后另存独立副本。", "", () => Run(OpenMask)),
             new FeatureCommand("GridPilot_Segment", "中英文分词", "离线分词、专业词表和三种输出；预览后生成新工作簿。", "", () => Run(()=>Show(new SegmentationWindow(navigation.Settings,gateway.CaptureTextSelection(),Path.Combine(Path.GetDirectoryName(ExcelDnaUtil.XllPath),"Resources"),gateway.WriteTextOutput)))),
             new FeatureCommand("GridPilot_CopyInternal", "原样复制·内部公式", "复制到新工作簿，保留排版和范围内公式；外部及无法确认依赖的公式按设置转为当前值或停止。Esc 可取消。", "", () => Run(() => CopySelection(true))),
@@ -118,6 +119,59 @@ namespace SheetPilot.Excel
                 finally{busy=false;}
             },()=>{try{operation?.Cancel();}catch(ObjectDisposedException){}});
             window.Disconnected+=()=>{lifetime.Cancel();};
+        }
+        private void OpenSimpleMask()
+        {
+            SimpleMaskSnapshot snapshot=null;SimpleMaskResult result=null;string fingerprint=null;bool busy=false,applied=false;
+            var lifetime=new CancellationTokenSource();CancellationTokenSource operation=null;PortableWindow window=null;
+            Action<string,int,long,long> progress=(phase,percent,current,total)=>window?.SendProgress(phase,percent,current,total);
+            window=OpenPortable(async message=>
+            {
+                lifetime.Token.ThrowIfCancellationRequested();if(busy)throw new InvalidOperationException("请等待当前操作完成。");
+                busy=true;operation?.Dispose();operation=CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);var token=operation.Token;
+                try
+                {
+                    string action=(string)message["action"];
+                    if(action=="init"||action=="simpleCapture")
+                    {
+                        snapshot=null;result=null;fingerprint=null;applied=false;
+                        snapshot=gateway.CaptureSimpleMask(token,progress);
+                        return new {mode="simple",book=snapshot.BookName,sheet=snapshot.SheetName,count=snapshot.Cells.Count,blocks=snapshot.Blocks,mappingVersion=SimpleMask.MappingVersion,letters=SimpleMask.Letters,digits=SimpleMask.Digits};
+                    }
+                    if(snapshot==null)throw new InvalidOperationException("请先读取选区。");
+                    if(!new[]{"simplePreview","simplePage","simpleCopy","simpleExport","simpleApply","simpleRecovery"}.Contains(action))throw new InvalidOperationException("未知操作。");
+                    var options=message["options"].ToObject<SimpleMaskOptions>();string key=JsonConvert.SerializeObject(options);
+                    if(action=="simplePreview")
+                    {
+                        result=null;fingerprint=null;applied=false;
+                        result=await Task.Run(()=>SimpleMask.Build(snapshot,options,token,(done,total)=>progress("生成脱敏预览",total==0?100:done*100/total,done,total)),token);fingerprint=key;
+                    }
+                    if(result==null||key!=fingerprint)throw new InvalidOperationException("规则已改变，请重新预览。");
+                    if(action=="simplePreview"||action=="simplePage")
+                    {
+                        string search=(string)message["search"]??"";var rows=result.Cells.Where(c=>search.Length==0||new[]{c.Address,SimpleMask.Text(c.Before),c.After??"",c.Skip??"",c.WriteStatus??""}.Any(v=>v.IndexOf(search,StringComparison.OrdinalIgnoreCase)>=0)).ToArray();
+                        int offset=Math.Max(0,Math.Min((int?)message["offset"]??0,Math.Max(0,rows.Length-1)));
+                        return new {summary=result.Summary,changed=result.Changed,skipped=result.Skipped,total=rows.Length,offset,rows=rows.Skip(offset).Take(100).Select(c=>new{address=c.Address,before=SimpleMask.Text(c.Before),after=c.After,status=c.WriteStatus??c.Skip??(c.After==SimpleMask.Text(c.Before)?"未变化":"可处理")})};
+                    }
+                    if((bool?)message["confirmed"]!=true)throw new InvalidOperationException("请先检查预览并确认。");
+                    if(action=="simpleCopy")
+                    {
+                        int block=(int?)message["block"]??0;
+                        if(block<0||block>=snapshot.Blocks.Count)throw new InvalidOperationException("请选择有效的区域。");
+                        return MaskPreview.Clipboard(SimpleMask.Output(snapshot,result),block,1,snapshot.Blocks[block].Rows,100000);
+                    }
+                    if(action=="simpleExport")return new {saved=gateway.ExportSimpleMask(snapshot,result,(string)message["path"],token),message="已导出脱敏结果；跳过项留空，未包含原文。"};
+                    if(action=="simpleRecovery")
+                    {
+                        if((bool?)message["sensitiveConfirmed"]!=true)throw new InvalidOperationException("还原记录含原文，请单独保管并确认后导出。");
+                        return new {saved=gateway.ExportSimpleRecovery(snapshot,result,(string)message["path"]),message="已导出含原文的还原记录，请勿随脱敏报表分享。"};
+                    }
+                    if(applied)throw new InvalidOperationException("此预览已写回，请重新读取选区。");
+                    string summary=gateway.ApplySimpleMask(snapshot,result,(bool?)message["backupConfirmed"]==true,token,progress);applied=true;Ribbon.Refresh();return new {message=summary,applied=true};
+                }
+                finally{busy=false;}
+            },()=>{try{operation?.Cancel();}catch(ObjectDisposedException){}});
+            window.Disconnected+=()=>lifetime.Cancel();
         }
         private void OpenDatabase()
         {

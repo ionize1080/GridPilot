@@ -1,4 +1,4 @@
-﻿GridPilot includes unmodified Excel-DNA 1.9.0 loader and integration components.
+GridPilot includes unmodified Excel-DNA 1.9.0 loader and integration components.
 Excel-DNA project: https://github.com/Excel-DNA/ExcelDna
 Copyright and redistribution terms: see EXCEL-DNA-LICENSE.txt (zlib-style license).
 
@@ -28,3 +28,8 @@ Reference icon guidance: https://learn.microsoft.com/en-us/windows/apps/design/i
 Icons are original code-drawn assets; no external icon artwork copied.
 Test corpus: https://github.com/apache/poi/tree/trunk/test-data/spreadsheet (Apache-2.0).
 Test samples and user workbooks are NOT included in releases.
+
+Unicode Unihan 17.0.0 (kMandarin)
+Fixed pinyin initials data embedded in SheetPilot.Core.dll.
+Source: https://www.unicode.org/Public/17.0.0/ucd/Unihan.zip
+Distributed under Unicode License v3; see UNICODE-LICENSE.txt or Settings > About.

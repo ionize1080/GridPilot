@@ -16,10 +16,10 @@ namespace SheetPilot.Core
             return new {summary=result.Summary,changed=result.Changed,formulas=result.Formulas,total=Math.Min(20000,matches.Length),capped=matches.Length>20000,offset,pageSize=size,
                 rows=matches.Take(20000).Skip(offset).Take(size).Select(p=>new {location=p.Cell.Location,before=p.Before,after=p.After}).ToArray()};
         }
-        public static object Clipboard(MaskResult result,int sheet,int firstRow,int lastRow)
+        public static object Clipboard(MaskResult result,int sheet,int firstRow,int lastRow,int rowLimit=20000)
         {
             if(sheet<0||sheet>=result.Output.Sheets.Count)throw new InvalidOperationException("请选择要复制的工作表。");
-            var spec=result.Output.Sheets[sheet];if(firstRow<1||lastRow<firstRow||lastRow>spec.Rows||lastRow-firstRow+1>20000)throw new InvalidOperationException("复制范围必须位于工作表内，单次最多 20000 行。");
+            var spec=result.Output.Sheets[sheet];if(firstRow<1||lastRow<firstRow||lastRow>spec.Rows||lastRow-firstRow+1>rowLimit)throw new InvalidOperationException("复制范围必须位于工作表内，单次最多 "+rowLimit+" 行。");
             if((long)(lastRow-firstRow+1)*spec.Columns>1000000)throw new InvalidOperationException("复制范围超过 100 万格，请缩小行范围。");
             var cells=result.Output.Cells.Where(c=>c.Sheet==sheet&&c.Row>=firstRow&&c.Row<=lastRow).ToDictionary(c=>(long)c.Row*16384+c.Column);
             var plain=new StringBuilder();var html=new StringBuilder("<html><body><table>");

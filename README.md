@@ -1,8 +1,8 @@
 # GridPilot
 
-Windows 桌面 Excel 的便携工具集。当前版本 **1.1.0**。
+Windows 桌面 Excel 的便携工具集。当前版本 **1.2.0**。
 
-[下载完整便携包](https://github.com/ionize1080/GridPilot/releases/tag/v1.1.0) · [更新说明](RELEASE-v1.1.0.md) · [验证记录](VALIDATION.txt) · [数据库设计](docs/v1.1/DESIGN.md)
+[下载完整便携包](https://github.com/ionize1080/GridPilot/releases/tag/v1.2.0) · [更新说明](RELEASE-v1.2.0.md) · [验证记录](VALIDATION.txt) · [数据库设计](docs/v1.1/DESIGN.md)
 
 新版脱敏与总设置采用独立 Chromium 窗口，免安装、离线运行、按需启动。导航保留轻量原生任务面板。XLL、业务 DLL、词典和浏览器已拆分，**必须完整解压，不能单独复制 XLL**。
 
@@ -15,6 +15,14 @@ Windows 桌面 Excel 的便携工具集。当前版本 **1.1.0**。
 3. 升级时退出 Excel，保留 `GridPilot.navigation.json` 和 `GridPilot.tools.json`。新旧版本不要同时加载。
 
 本机验证环境是 Windows 11 + Excel 16 x64。**Win10 21H1 + Excel 2010、32 位 Excel 尚未实机验收**。构建基线与兼容路径保留，但不能把新版 Excel 的测试结果视为旧版验收。
+
+## v1.2 简易脱敏
+
+Ribbon → **简易脱敏**：处理选区、整行、整列和不连续区域。支持固定拼音首字母/字符替换、首尾交换、倒序、自定义正则及纯数字加减乘除，可选前后缀。逐格预览和跳过错误；可复制、导出 XLSX，或确认备份后写回原表并撤销。
+
+首字母不能单独还原中文。需要将来恢复时，请单独导出含原文的还原记录 JSON；固定映射不会随运行随机改变。详见 [使用与边界](SIMPLE-MASKING.txt)。
+
+![简易脱敏界面，合成演示数据](docs/v1.2/simple-mask.png)
 
 ## 功能
 

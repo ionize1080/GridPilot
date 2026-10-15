@@ -6,4 +6,5 @@
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
     <Content Include="$(Pkgjieba_NET)/Resources/dict.txt;$(Pkgjieba_NET)/Resources/prob_emit.json;$(Pkgjieba_NET)/Resources/prob_trans.json" Link="Resources/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
+  <ItemGroup><EmbeddedResource Include="Resources/pinyin-initials-v1.tsv" /></ItemGroup>
 </Project>

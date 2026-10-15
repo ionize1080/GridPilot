@@ -50,7 +50,7 @@ async function test(mode){
       console.log('PASS database production UI: folder wizard, scan 20101 rows, paging, visual SQL, exact sum, read-only guard, source row, provenance, narrow layout');
     }else if(mode==='settings'){
       await page.getByRole('button',{name:'关于与许可',exact:true}).click();await page.locator('.legal-text').filter({hasText:'Permission'}).waitFor();
-      const result=await page.evaluate(()=>window.gridpilot.request({action:'legal',index:6}));assert(result.titles.length>=7);assert(result.text.length>0);assert(result.length>40000);console.log('PASS clean package bundled licenses visible in settings, including Chromium');
+      const result=await page.evaluate(async()=>{const all=await window.gridpilot.request({action:'legal',index:0});const index=all.titles.findIndex(t=>t.includes('LICENSES.chromium'));if(index<0)throw new Error('Chromium license missing');return window.gridpilot.request({action:'legal',index});});assert(result.titles.length>=7);assert(result.text.length>0);assert(result.length>40000);console.log('PASS clean package bundled licenses visible in settings, including Chromium');
     }else{
       await page.getByRole('button',{name:'分析与预览',exact:true}).click();await page.locator('dialog[open]').waitFor();assert.equal(await page.locator('#previewRows tr').count(),100);assert(await page.locator('#copyMask').isDisabled());
       await page.locator('#previewNext').click();await page.locator('#previewPageInfo').filter({hasText:'101–200'}).waitFor();

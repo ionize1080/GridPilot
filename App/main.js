@@ -27,12 +27,18 @@ const databases=new DatabaseManager(path.join(app.getPath('appData'),'GridPilot'
 const file=pathToFileURL(path.join(__dirname,'index.html')).href;
 ipcMain.handle('request',async(event,message)=>{
   if(event.sender!==win?.webContents || event.senderFrame.url!==file)throw new Error('Invalid sender');
-  if(!message || !['init','preview','export','cancel','saveSettings','navigationSettings','previewPage','copyMask','dbList','dbChoose','dbSample','dbCreate','dbInfo','dbScan','dbQuery','dbOpenSource','legal'].includes(message.action))throw new Error('Invalid action');
+  if(!message || !['init','preview','export','cancel','saveSettings','navigationSettings','previewPage','copyMask','dbList','dbChoose','dbSample','dbCreate','dbInfo','dbScan','dbQuery','dbOpenSource','legal','simpleCapture','simplePreview','simplePage','simpleCopy','simpleExport','simpleApply','simpleRecovery'].includes(message.action))throw new Error('Invalid action');
   if(JSON.stringify(message).length>32*1024*1024)throw new Error('请求过大');
   if(message.action==='legal'){const file=path.join(__dirname,'legal.bin');if(!fs.existsSync(file))return {titles:[],text:'许可信息将在正式发布包中提供。',offset:0,length:0};const entries=JSON.parse(require('node:zlib').gunzipSync(fs.readFileSync(file)));const selected=entries[Math.max(0,Math.min(entries.length-1,Number(message.index)||0))];let offset=Math.max(0,Number(message.offset)||0);if(message.search)offset=Math.max(0,selected.text.toLowerCase().indexOf(String(message.search).toLowerCase(),offset));return {titles:entries.map(e=>e.title),text:selected.text.slice(offset,offset+40000),offset,length:selected.text.length};}
   if(message.action.startsWith('db'))return databases.handle(message,dialog,win);
   if(message.action==='cancel')databases.cancel();
-  if(message.action==='copyMask'){const result=await hostRequest(message);await clipboard.write([new ClipboardItem({'text/plain':result.text,'text/html':result.html})]);return {copied:true,message:`已复制 ${result.rows} 行 × ${result.columns} 列脱敏结果。`};}
+  if((message.action==='copyMask'||message.action==='simpleCopy')){const result=await hostRequest(message);await clipboard.write([new ClipboardItem({'text/plain':result.text,'text/html':result.html})]);return {copied:true,message:`已复制 ${result.rows} 行 × ${result.columns} 列脱敏结果。`};}
+  if(message.action==='simpleExport'||message.action==='simpleRecovery'){
+    const recovery=message.action==='simpleRecovery';
+    const choice=await dialog.showSaveDialog(win,{title:recovery?'保存含原文的还原记录（请单独保管）':'保存脱敏结果',defaultPath:recovery?'GridPilot-recovery.json':'GridPilot-simple-masked.xlsx',filters:[{name:recovery?'还原记录':'Excel 工作簿',extensions:[recovery?'json':'xlsx']}],properties:['showOverwriteConfirmation']});
+    if(choice.canceled)return {canceled:true,message:'已取消保存。'};
+    message={...message,path:choice.filePath};
+  }
   if(message.action==='export'){const choice=await dialog.showSaveDialog(win,{title:'保存脱敏副本',defaultPath:'GridPilot-masked.xlsx',filters:[{name:'Excel 工作簿',extensions:['xlsx']}],properties:['showOverwriteConfirmation']});if(choice.canceled)return {canceled:true,message:'已取消保存，预览仍保留。'};message={...message,path:choice.filePath};}
   return hostRequest(message);
 });

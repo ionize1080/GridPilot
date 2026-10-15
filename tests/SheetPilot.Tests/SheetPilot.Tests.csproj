@@ -7,6 +7,7 @@
   <Compile Include="../../src/SheetPilot.Excel/ExcelGateway.cs" Link="ExcelGateway.cs"/>
   <Compile Include="../../src/SheetPilot.Excel/WorkbookOperations.cs" Link="WorkbookOperations.cs"/>
   <Compile Include="../../src/SheetPilot.Excel/SelectionCopy.cs" Link="SelectionCopy.cs"/>
+  <Compile Include="../../src/SheetPilot.Excel/SimpleMaskOperations.cs" Link="SimpleMaskOperations.cs"/>
   <Compile Include="../../src/SheetPilot.Excel/TextOperations.cs" Link="TextOperations.cs"/>
   <Compile Include="../../src/SheetPilot.Excel/MaskAppearance.cs" Link="MaskAppearance.cs" /><Compile Include="../../src/SheetPilot.Excel/MaskOperations.cs" Link="MaskOperations.cs"/>
   <Compile Include="../../src/SheetPilot.Excel/MaskAppearanceStream.cs" Link="MaskAppearanceStream.cs"/>
