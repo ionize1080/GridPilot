@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -43,7 +43,8 @@ namespace SheetPilot.Excel
         public bool CanUndo => gateway.CanUndo;
         internal string PerformanceSummary => focus?.PerformanceSummary ?? "Focus not started";
         public IEnumerable<FeatureCommand> Commands => new[] {
-            new FeatureCommand("GridPilot_Database", "报表数据库", "文件夹报表归档、快照与累计去重、可视化和 SQL 查询；在源 Excel 修改后扫描更新。", "", () => Run(OpenDatabase)),
+            new FeatureCommand("GridPilot_Reconcile", "监管核对", "两期余额、发放回收、专项关联、差额追溯与变动报告。", "", () => Run(()=>OpenDatabase(true))),
+            new FeatureCommand("GridPilot_Database", "报表数据库", "文件夹报表归档、快照与累计去重、可视化和 SQL 查询；在源 Excel 修改后扫描更新。", "", () => Run(()=>OpenDatabase())),
             new FeatureCommand("GridPilot_SimpleMask", "简易脱敏", "选区拼音首字母、固定字符映射、首尾交换、正则和数字运算；预览后复制、导出或写回原表。", "", () => Run(OpenSimpleMask)),
             new FeatureCommand("GridPilot_Mask", "数据脱敏", "选择字段、统一跨表映射；验证支持的公式关系后另存独立副本。", "", () => Run(OpenMask)),
             new FeatureCommand("GridPilot_Segment", "中英文分词", "离线分词、专业词表和三种输出；预览后生成新工作簿。", "", () => Run(()=>Show(new SegmentationWindow(navigation.Settings,gateway.CaptureTextSelection(),Path.Combine(Path.GetDirectoryName(ExcelDnaUtil.XllPath),"Resources"),gateway.WriteTextOutput)))),
@@ -173,13 +174,14 @@ namespace SheetPilot.Excel
             },()=>{try{operation?.Cancel();}catch(ObjectDisposedException){}});
             window.Disconnected+=()=>lifetime.Cancel();
         }
-        private void OpenDatabase()
+        private void OpenDatabase(bool reconcile=false)
         {
             var lifetime=new CancellationTokenSource();
             var window=OpenPortable(async message=>
             {
                 string action=(string)message["action"];
-                if(action=="init")return new {mode="database"};
+                if(action=="init")return new {mode=reconcile?"reconcile":"database"};
+                if(action=="reconcileRead")return await Task.Run(()=>ReportReader.Read((string)message["path"],(string)message["sheet"],(int?)message["maxRows"]??0,lifetime.Token,true),lifetime.Token);
                 if(action=="dbReadFile")return await Task.Run(()=>ReportReader.Read((string)message["path"],(string)message["sheet"],(int?)message["maxRows"]??0,lifetime.Token),lifetime.Token);
                 if(action=="dbOpenSource")return gateway.OpenReportSource((string)message["path"],(string)message["sheet"],(int?)message["row"]??1);
                 throw new InvalidOperationException("未知数据库操作。");

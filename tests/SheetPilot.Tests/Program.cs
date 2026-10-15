@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
@@ -23,8 +23,10 @@ internal static partial class Program
         try
         {
             if(args.Length==0 && Path.GetFileNameWithoutExtension(System.Reflection.Assembly.GetExecutingAssembly().Location).Contains("Compatibility")) return CompatibilityRunner();
+            if(args.Length>0&&args[0]=="--reconcile-json"){Console.OutputEncoding=new System.Text.UTF8Encoding(false);Console.WriteLine(Newtonsoft.Json.JsonConvert.SerializeObject(ReportReader.Read(args[1],args.Length>2?args[2]:null,0,CancellationToken.None,true)));return 0;}
             if(args.Length>0&&args[0]=="--report-json"){Console.OutputEncoding=new System.Text.UTF8Encoding(false);Console.WriteLine(Newtonsoft.Json.JsonConvert.SerializeObject(ReportReader.Read(args[1],args.Length>2?args[2]:null,0,CancellationToken.None)));return 0;}
             Console.WriteLine("Test process: " + (Environment.Is64BitProcess ? "x64" : "x86"));
+            if(args.Length>1&&args[0]=="--reconcile-launch"){V11Launch(Path.GetFullPath(args[1]),"GridPilot_Reconcile");Console.WriteLine("PASS "+checks+" assertions");return 0;}
             if(args.Length>1&&args[0]=="--simple-launch"){V11Launch(Path.GetFullPath(args[1]),"GridPilot_SimpleMask");Console.WriteLine("PASS "+checks+" assertions");return 0;}
             if(args.Length>1&&args[0]=="--v11-launch"){V11Launch(Path.GetFullPath(args[1]));Console.WriteLine("PASS "+checks+" assertions");return 0;}
             if(args.Length>0 && args[0]=="--simple-mask"){SimpleMaskCoreTests();SimpleHeaderTests();if(args.Contains("--excel")){SimpleMaskExcelTests();SimpleHeaderExcelTests(args.Length>2?args[2]:null);}Console.WriteLine("PASS "+checks+" assertions");return 0;}

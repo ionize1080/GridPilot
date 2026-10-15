@@ -19,7 +19,7 @@ namespace SheetPilot.Excel
             var entry=zip.GetEntry(name)??throw new InvalidOperationException("报表结构不完整："+name);
             using(var stream=entry.Open()) using(var reader=XmlReader.Create(stream,new XmlReaderSettings{DtdProcessing=DtdProcessing.Prohibit,XmlResolver=null,MaxCharactersInDocument=160000000}))return XDocument.Load(reader);
         }
-        public static object Read(string path,string sheetName,int maxRows,CancellationToken token)
+        public static object Read(string path,string sheetName,int maxRows,CancellationToken token,bool tolerateErrors=false)
         {
             if(!new[]{".xlsx",".xlsm"}.Contains(Path.GetExtension(path).ToLowerInvariant()))throw new InvalidOperationException("第一版支持 .xlsx / .xlsm；请先将旧版 .xls 另存为 .xlsx。");
             using(var stream=new FileStream(path,FileMode.Open,FileAccess.Read,FileShare.ReadWrite|FileShare.Delete)) using(var zip=new ZipArchive(stream,ZipArchiveMode.Read))
@@ -56,7 +56,7 @@ namespace SheetPilot.Excel
                             string type=(string)c.Attribute("t"),raw=(string)c.Element(Ns+"v");object value=raw;if(raw!=null&&(type==null||type=="n"))numeric.Add(column-1);
                             if(type=="s")value=raw==null?null:strings[int.Parse(raw,CultureInfo.InvariantCulture)];
                             else if(type=="inlineStr")value=string.Concat(c.Descendants(Ns+"t").Select(t=>t.Value));
-                            else if(type=="e")throw new InvalidOperationException("第 "+number+" 行含 Excel 错误值，请在源表修正。");
+                            else if(type=="e"){if(!tolerateErrors)throw new InvalidOperationException("第 "+number+" 行含 Excel 错误值，请在源表修正。");value=new {error=raw??"Excel 错误"};}
                             else if(type=="b")value=raw=="1"?"TRUE":"FALSE";
                             else if(type!="str" && raw!=null)
                             {
@@ -64,7 +64,7 @@ namespace SheetPilot.Excel
                                 // Keep every numeric lexeme as text; configured amount/date columns are converted later.
                                 if(format!=null && format.Length<=32 && format.All(ch=>ch=='0') && raw.All(char.IsDigit))value=raw.PadLeft(format.Length,'0');
                             }
-                            if(c.Element(Ns+"f")!=null&&raw==null)throw new InvalidOperationException("第 "+number+" 行公式没有缓存值，请用 Excel 计算并保存后扫描。");
+                            if(c.Element(Ns+"f")!=null&&raw==null){if(!tolerateErrors)throw new InvalidOperationException("第 "+number+" 行公式没有缓存值，请用 Excel 计算并保存后扫描。");value=new {error="公式缺少缓存值，请在 Excel 计算并保存"};}
                             values[column-1]=value;
                         }
                         if(values.Any(v=>v!=null&&!Equals(v,"")))rows.Add(new {row=number,values,numeric});

@@ -1,4 +1,4 @@
-﻿param([string]$PackageSource, [string]$BrowserRuntime)
+param([string]$PackageSource, [string]$BrowserRuntime)
 $ErrorActionPreference = 'Stop'
 Push-Location $PSScriptRoot
 try {
@@ -27,10 +27,18 @@ try {
     Copy-Item -LiteralPath 'App' -Destination 'dist' -Recurse -Force
     if (-not $BrowserRuntime) { $BrowserRuntime=Join-Path $PSScriptRoot '.temp/Browser' }
     if (-not (Test-Path (Join-Path $BrowserRuntime 'electron.exe'))) { throw 'Run prepare-browser.ps1 or provide -BrowserRuntime. No runtime installation is needed.' }
+    $previousElectronMode=$env:ELECTRON_RUN_AS_NODE
+    try {
+        $env:ELECTRON_RUN_AS_NODE='1'
+        foreach($suite in @('tests/reconcile.cjs','tests/reconcile-manager.cjs')) {
+            $testProcess=Start-Process -FilePath (Join-Path $BrowserRuntime 'electron.exe') -ArgumentList $suite -WorkingDirectory $PSScriptRoot -WindowStyle Hidden -Wait -PassThru
+            if ($testProcess.ExitCode -ne 0) { throw "Reconciliation tests failed: $suite" }
+        }
+    } finally { $env:ELECTRON_RUN_AS_NODE=$previousElectronMode }
     New-Item -ItemType Directory -Force 'dist/Browser' | Out-Null
     Get-ChildItem -LiteralPath $BrowserRuntime | Copy-Item -Destination 'dist/Browser' -Recurse -Force
     Copy-Item -LiteralPath 'src\SheetPilot.Core\bin\Release\net462\Resources' -Destination 'dist' -Recurse -Force
-    foreach ($file in @('README.txt','RELEASE-v1.3.0.md','DATABASE.txt','SIMPLE-MASKING.txt','UNICODE-LICENSE.txt','COMPATIBILITY.txt','COPYING.txt','MASKING.txt','SEGMENTATION.txt','VALIDATION.txt','FIX-COLOR-PICKER.txt','SETTINGS.txt','Check-Environment.ps1','EXCEL-DNA-LICENSE.txt','JIEBA-NET-LICENSE.txt','JIEBA-LICENSE.txt','NEWTONSOFT-JSON-LICENSE.txt','THIRD-PARTY-NOTICES.txt')) { Copy-Item -LiteralPath $file -Destination 'dist' }
+    foreach ($file in @('README.txt','RELEASE-v1.4.0.md','DATABASE.txt','SIMPLE-MASKING.txt','RECONCILIATION.txt','UNICODE-LICENSE.txt','COMPATIBILITY.txt','COPYING.txt','MASKING.txt','SEGMENTATION.txt','VALIDATION.txt','FIX-COLOR-PICKER.txt','SETTINGS.txt','Check-Environment.ps1','EXCEL-DNA-LICENSE.txt','JIEBA-NET-LICENSE.txt','JIEBA-LICENSE.txt','NEWTONSOFT-JSON-LICENSE.txt','THIRD-PARTY-NOTICES.txt')) { Copy-Item -LiteralPath $file -Destination 'dist' }
     $packageRoot=(Resolve-Path dist).Path
     Get-ChildItem -LiteralPath $packageRoot -File -Recurse | Where-Object Name -ne 'SHA256SUMS.txt' | Sort-Object FullName | Get-FileHash -Algorithm SHA256 | ForEach-Object { $_.Hash + '  ' + $_.Path.Substring($packageRoot.Length+1).Replace('\','/') } | Set-Content 'dist\SHA256SUMS.txt' -Encoding ASCII
     Write-Host 'Portable add-ins are ready in dist/.'

@@ -1,8 +1,8 @@
-﻿# GridPilot
+# GridPilot
 
-Windows 桌面 Excel 的便携工具集。当前版本 **1.3.0**。
+Windows 桌面 Excel 的便携工具集。当前版本 **1.4.0**。
 
-[下载完整便携包](https://github.com/ionize1080/GridPilot/releases/tag/v1.3.0) · [更新说明](RELEASE-v1.3.0.md) · [验证记录](VALIDATION.txt) · [数据库设计](docs/v1.1/DESIGN.md)
+[下载完整便携包](https://github.com/ionize1080/GridPilot/releases/tag/v1.4.0) · [更新说明](RELEASE-v1.4.0.md) · [验证记录](VALIDATION.txt) · [数据库设计](docs/v1.1/DESIGN.md)
 
 新版脱敏与总设置采用独立 Chromium 窗口，免安装、离线运行、按需启动。导航保留轻量原生任务面板。XLL、业务 DLL、词典和浏览器已拆分，**必须完整解压，不能单独复制 XLL**。
 
@@ -15,6 +15,16 @@ Windows 桌面 Excel 的便携工具集。当前版本 **1.3.0**。
 3. 升级时退出 Excel，保留 `GridPilot.navigation.json` 和 `GridPilot.tools.json`。新旧版本不要同时加载。
 
 本机验证环境是 Windows 11 + Excel 16 x64。**Win10 21H1 + Excel 2010、32 位 Excel 尚未实机验收**。构建基线与兼容路径保留，但不能把新版 Excel 的测试结果视为旧版验收。
+
+## v1.4 监管核对与变动报告
+
+Ribbon → **监管核对**：连接两期余额、发放回收、专项表及监管报表，保存取数规则后每期重复运行。支持财务/试算平衡多项加减汇总、错误跳过、Top N 变动、来源行定位与报告草稿。
+
+两期金额、差额与已配置的现金流分别核对；异常记录保留为“部分结果”。自动识别底稿只生成待复核映射，不推断未知监管口径。导出 Markdown / CSV / 完整 JSON 底稿，源文件只读。
+
+[使用说明](RECONCILIATION.txt) · [功能与技术设计](docs/v1.4/DESIGN.md)
+
+![监管核对工作区，合成演示数据](docs/v1.4/reconciliation.png)
 
 ## v1.3 智能表头与简易脱敏
 

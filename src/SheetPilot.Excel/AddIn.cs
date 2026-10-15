@@ -47,6 +47,7 @@ namespace SheetPilot.Excel
         [ExcelCommand(Name = "GridPilot_Text")] public static void Text() => Guard(() => Tools?.Execute("GridPilot_Text"));
         [ExcelCommand(Name = "GridPilot_Number")] public static void Number() => Guard(() => Tools?.Execute("GridPilot_Number"));
         [ExcelCommand(Name = "GridPilot_Segment")] public static void Segment() => Guard(() => Tools?.Execute("GridPilot_Segment"));
+        [ExcelCommand(Name = "GridPilot_Reconcile")] public static void Reconcile() => Guard(() => Tools?.Execute("GridPilot_Reconcile"));
         [ExcelCommand(Name = "GridPilot_Database")] public static void Database() => Guard(() => Tools?.Execute("GridPilot_Database"));
         [ExcelCommand(Name = "GridPilot_SimpleMask")] public static void SimpleMaskCommand() => Guard(() => Tools?.Execute("GridPilot_SimpleMask"));
         [ExcelCommand(Name = "GridPilot_Mask")] public static void Mask() => Guard(() => Tools?.Execute("GridPilot_Mask"));
