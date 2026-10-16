@@ -131,4 +131,3 @@ internal static partial class Program
         finally{if(app!=null){try{app.Quit();}catch{}Marshal.ReleaseComObject(app);}}
     }
 }
-
