@@ -28,6 +28,7 @@ namespace SheetPilot.Excel
         public bool IsFeatureEnabled(string id) => settings.IsEnabled(id);
         public bool SortMenuEnabled => settings.IsEnabled("GridPilot_Sort") && settings.SortContextMenu;
         private readonly HashSet<Window> windows = new HashSet<Window>();
+        internal bool HasToolWindow => windows.Count != 0;
         private readonly Timer statusTimer = new Timer { Interval = 9000 };
         private object previousStatus;
         private string status;
@@ -234,10 +235,10 @@ namespace SheetPilot.Excel
         {
             new WindowInteropHelper(window).Owner = ExcelDnaUtil.WindowHandle;
             windows.Add(window);
-            window.Closed+=(s,e)=>{windows.Remove(window);if(!disposed)WorksheetFocus.Restore(ExcelDnaUtil.WindowHandle);};
-            try { window.Show(); } catch { windows.Remove(window);throw; }
-            // Return the Excel-DNA macro before the user interacts. A nested ShowDialog
-            // keeps SyncMacro alive while Office may already unload the add-in.
+            window.Closed+=(s,e)=>{windows.Remove(window);if(!disposed){navigation.Refresh();if(windows.Count==0)WorksheetFocus.Restore(ExcelDnaUtil.WindowHandle);}};
+            // Excel owns the native message loop. Keep this editor modal so Office
+            // cannot consume its keystrokes as worksheet input (including IME).
+            try{window.ShowDialog();}catch{windows.Remove(window);throw;}
         }
         private void Announce(string text)
         {

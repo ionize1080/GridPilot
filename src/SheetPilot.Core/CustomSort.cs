@@ -47,7 +47,8 @@ namespace SheetPilot.Core
         private sealed class Part { public string Name; public Dictionary<string,int> Sequence; }
         private sealed class Rule { public Regex Regex; public List<Part> Parts=new List<Part>(); }
         private sealed class Key { public int Index,Group; public List<BigInteger> Values=new List<BigInteger>(); public string Text; public object[] NaturalParts; }
-        public static int[] Order(IReadOnlyList<string> values, SortOptions options)
+        public static int[] Order(IReadOnlyList<string> values, SortOptions options) => Order(values,options,out _);
+        public static int[] Order(IReadOnlyList<string> values, SortOptions options,out int matched)
         {
             if(options==null)throw new ArgumentNullException(nameof(options));
             if(values.Count>200000)throw new InvalidOperationException("一次最多排序 200,000 行。");
@@ -76,6 +77,7 @@ namespace SheetPilot.Core
                 }
             }
             catch(RegexMatchTimeoutException){throw new InvalidOperationException("正则匹配超时，请简化嵌套或重复表达式。");}
+            matched=options.Natural?values.Count:keys.Count(k=>k.Group<rules.Count);
             keys.Sort((a,b)=>
             {
                 int n=a.Group.CompareTo(b.Group);if(n!=0)return n; // Rule priority is explicit, independent of direction.

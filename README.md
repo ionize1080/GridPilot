@@ -1,8 +1,8 @@
 # GridPilot
 
-Windows 桌面 Excel 的便携工具集。当前版本 **1.5.0**。
+Windows 桌面 Excel 的便携工具集。当前版本 **1.5.1**。
 
-[下载完整便携包](https://github.com/ionize1080/GridPilot/releases/tag/v1.5.0) · [更新说明](RELEASE-v1.5.0.md) · [验证记录](VALIDATION.txt) · [数据库设计](docs/v1.1/DESIGN.md)
+[下载完整便携包](https://github.com/ionize1080/GridPilot/releases/tag/v1.5.1) · [更新说明](RELEASE-v1.5.1.md) · [验证记录](VALIDATION.txt) · [数据库设计](docs/v1.1/DESIGN.md)
 
 新版脱敏与总设置采用独立 Chromium 窗口，免安装、离线运行、按需启动。导航保留轻量原生任务面板。XLL、业务 DLL、词典和浏览器已拆分，**必须完整解压，不能单独复制 XLL**。
 
@@ -24,9 +24,9 @@ Windows 桌面 Excel 的便携工具集。当前版本 **1.5.0**。
 
 导航支持名称自然升降序、同一套自定义规则、右键 / F2 原地重命名、Enter 保存、Esc 取消，以及自定义鼠标悬停颜色。
 
-移除退出阶段的强制终结器等待；工具窗口改为非模态，避免 Excel 关闭时仍有未返回的窗口回调。详见 [排序说明](SORTING.txt) 和 [验证记录](VALIDATION.txt)。
+移除退出阶段的强制终结器等待。v1.5.1 修复排序窗口输入进入工作表的问题，使用模态编辑并暂停导航刷新；新增一键示例、匹配统计及横向合并记录排序。完成或关闭编辑窗口后再操作 Excel。详见 [排序说明](SORTING.txt) 和 [验证记录](VALIDATION.txt)。
 
-![排序预览，合成数据](docs/v1.5/sort.png)
+![排序预览，合成数据](docs/v1.5.1/sort.png)
 
 ## v1.4 监管核对与变动报告
 

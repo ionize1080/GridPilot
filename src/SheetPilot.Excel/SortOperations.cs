@@ -53,7 +53,6 @@ namespace SheetPilot.Excel
         private static void ValidateSortRange(dynamic book,dynamic sheet,dynamic range)
         {
             if((bool)book.ReadOnly||(bool)sheet.ProtectContents)throw new InvalidOperationException("工作簿只读或工作表受保护，无法排序。");
-            if(!Equals((object)range.MergeCells,false))throw new InvalidOperationException("排序区域包含合并单元格，请先在副本中取消合并。");
             if(!Equals((object)range.HasArray,false))throw new InvalidOperationException("排序区域包含数组公式，无法安全排序。");
             try{if(!Equals((object)range.HasSpill,false))throw new InvalidOperationException("排序区域包含动态数组，请先复制为值。");}
             catch(System.Runtime.InteropServices.COMException){/* Older Excel has no HasSpill. */}
@@ -84,6 +83,9 @@ namespace SheetPilot.Excel
         {
             dynamic app=application(),book=FindBook(snapshot.Book),sheet=FindPage(book,snapshot.Sheet),range=sheet.Range[snapshot.Address];
             ValidateSortRange(book,sheet,range);
+            // Exclude the header from the native sort range. Merged titles are not records.
+            dynamic records=sheet.Cells[snapshot.Row+(header?1:0),snapshot.Column].Resize[ranks.Length,snapshot.Columns];
+            var merges=RecordMerges(records);
             if(snapshot.Column+snapshot.Columns>(int)sheet.Columns.Count)throw new InvalidOperationException("数据已到最后一列，缺少临时排序键空间。");
             dynamic helper=sheet.Cells[snapshot.Row,snapshot.Column+snapshot.Columns].Resize[snapshot.Rows+(snapshot.Table!=null&&(bool)sheet.ListObjects[snapshot.Table].ShowTotals?1:0),1];
             if((double)app.WorksheetFunction.CountA(helper)!=0||!Equals((object)helper.MergeCells,false))throw new InvalidOperationException("数据右侧紧邻列不是空白，请先留出一列再排序。");
@@ -91,24 +93,55 @@ namespace SheetPilot.Excel
             if(table!=null&&(!header||(string)table.Range.Resize[snapshot.Rows,snapshot.Columns].Address!=snapshot.Address))throw new InvalidOperationException("Excel 表格范围已改变，请重新读取。");
             bool events=app.EnableEvents,screen=app.ScreenUpdating;object autoExpand=null;
             dynamic sort=table==null?sheet.Sort:table.Sort;
+            bool moved=false;var opened=new List<int[]>();
             try
             {
                 app.EnableEvents=false;app.ScreenUpdating=false;
                 // Keep Excel from absorbing a temporary key into a neighbouring table.
                 autoExpand=app.AutoCorrect.AutoExpandListRange;app.AutoCorrect.AutoExpandListRange=false;
                 if(table!=null){added=table.ListColumns.Add();helper=added.Range;}
+                // The temporary key is unmerged, so Excel rejects otherwise sortable
+                // horizontal merges. Open only those spans and restore them on the
+                // destination row; values/formulas/formats still move via native Sort.
+                foreach(var merge in merges){records.Cells[merge[0],merge[1]].Resize[1,merge[2]].UnMerge();opened.Add(merge);}
                 var keys=new object[ranks.Length,1];for(int i=0;i<ranks.Length;i++)keys[i,0]=ranks[i];
                 dynamic key=sheet.Cells[snapshot.Row+(header?1:0),snapshot.Column+snapshot.Columns].Resize[ranks.Length,1];key.Value2=keys;
-                if(header)helper.Cells[1,1].Value2="__GridPilotSort";
+                if(header&&table!=null)helper.Cells[1,1].Value2="__GridPilotSort";
                 sort.SortFields.Clear();sort.SortFields.Add(key,0,1,Type.Missing,0);
-                if(table==null)sort.SetRange(range.Resize[snapshot.Rows,snapshot.Columns+1]);
-                sort.Header=header?1:2;sort.MatchCase=false;sort.Orientation=1;sort.Apply();
+                if(table==null)sort.SetRange(records.Resize[ranks.Length,snapshot.Columns+1]);
+                sort.Header=table!=null?1:2;sort.MatchCase=false;sort.Orientation=1;
+                try{sort.Apply();moved=true;}
+                catch(System.Runtime.InteropServices.COMException ex){throw new InvalidOperationException("Excel 无法排序此区域。请检查数据行内的合并布局是否一致；合并标题请保留在表头或选择标题下方的数据区域。"+ex.Message,ex);}
             }
             finally
             {
-                try{sort.SortFields.Clear();if(added!=null)added.Delete();else helper.ClearContents();}
+                try{try{foreach(var merge in opened){int row=moved?ranks[merge[0]-1]+1:merge[0];records.Cells[row,merge[1]].Resize[1,merge[2]].Merge();}}
+                    finally{sort.SortFields.Clear();if(added!=null)added.Delete();else helper.ClearContents();}}
                 finally{try{if(autoExpand!=null)app.AutoCorrect.AutoExpandListRange=autoExpand;}finally{try{app.EnableEvents=events;}finally{app.ScreenUpdating=screen;}}}
             }
+        }
+        private static List<int[]> RecordMerges(dynamic records)
+        {
+            var result=new List<int[]>();if(Equals((object)records.MergeCells,false))return result;
+            // Skip whole unmerged rows and merged spans; never split a vertical record.
+            int columns=records.Columns.Count,firstRow=records.Row;
+            var watch=System.Diagnostics.Stopwatch.StartNew();
+            Action<dynamic> scan=null;scan=block=>
+            {
+                if(watch.ElapsedMilliseconds>5000)throw new InvalidOperationException("合并布局检查超过 5 秒，请缩小排序区域。");
+                if(Equals((object)block.MergeCells,false))return;
+                int count=block.Rows.Count;if(count>1){int half=count/2;scan(block.Resize[half,columns]);scan(block.Offset[half,0].Resize[count-half,columns]);return;}
+                dynamic row=block;int r=(int)row.Row-firstRow+1;
+                for(int c=1;c<=columns;)
+                {
+                    if(watch.ElapsedMilliseconds>5000)throw new InvalidOperationException("合并布局检查超过 5 秒，请缩小排序区域。");
+                    dynamic cell=row.Cells[1,c],area=cell.MergeArea;
+                    if((int)area.Rows.Count>1)throw new InvalidOperationException("数据区 "+(string)area.Address+" 跨多行合并。逐行排序会拆散同一记录；请选择不包含该合并块的数据区域。");
+                    if((int)area.Column<(int)records.Column||(int)area.Column+(int)area.Columns.Count>(int)records.Column+columns)throw new InvalidOperationException("合并单元格超出所选排序区域，请包含完整记录的所有列。");
+                    int width=area.Columns.Count;if(width>1)result.Add(new[]{r,c,width});c+=width;
+                }
+            };scan(records);
+            return result;
         }
         public string SortSheets(IReadOnlyList<SheetItem> expected,SortOptions options)
         {

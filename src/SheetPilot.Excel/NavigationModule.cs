@@ -129,7 +129,7 @@ namespace SheetPilot.Excel
         }
         public void Refresh()
         {
-            if (disposed || queued || sessions.Count == 0) return;
+            if (disposed || queued || sessions.Count == 0 || AddIn.Tools?.HasToolWindow == true) return;
             queued = true;
             try
             {
@@ -137,7 +137,7 @@ namespace SheetPilot.Excel
                 ExcelAsyncUtil.QueueAsMacro(() =>
                 {
                     queued = false;
-                    if (disposed) return;
+                    if (disposed || AddIn.Tools?.HasToolWindow == true) return;
                     try
                     {
                         foreach (var dead in sessions.Keys.Where(h => !IsWindow(h)).ToArray()) { sessions[dead].Dispose(); sessions.Remove(dead); }
