@@ -35,8 +35,11 @@ namespace SheetPilot.Core
         [DataMember] public string MutedTextColor { get => mutedTextColor; set { if (PreferenceInput.TryColor(value, out var color)) Set(ref mutedTextColor, color); } }
         private string accentColor = "#23825A";
         [DataMember] public string AccentColor { get => accentColor; set { if (PreferenceInput.TryColor(value, out var color)) Set(ref accentColor, color); } }
+        private string hoverColor = "#E2EEE7";
+        [DataMember] public string HoverColor { get => hoverColor; set { if (PreferenceInput.TryColor(value, out var color)) Set(ref hoverColor, color); } }
         public void ApplyPalette(string palette)
         {
+            HoverColor=palette=="dark"?"#31463F":palette=="neutral"?"#E4EAF4":"#E2EEE7";
             if (palette == "dark") { BackgroundColor = "#20262C"; SurfaceColor = "#2B333C"; TextColor = "#ECF0F3"; MutedTextColor = "#A3B2BE"; AccentColor = "#67CBA7"; }
             else if (palette == "neutral") { BackgroundColor = "#F5F6F8"; SurfaceColor = "#FFFFFF"; TextColor = "#293442"; MutedTextColor = "#758092"; AccentColor = "#537BC8"; }
             else { BackgroundColor = "#F7F9F7"; SurfaceColor = "#FFFFFF"; TextColor = "#294737"; MutedTextColor = "#7C9582"; AccentColor = "#23825A"; }

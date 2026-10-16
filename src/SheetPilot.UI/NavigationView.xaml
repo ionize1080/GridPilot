@@ -14,6 +14,7 @@
 <TextBlock Text="搜索工作表…" Foreground="{DynamicResource MutedBrush}" IsHitTestVisible="False"><TextBlock.Style><Style TargetType="TextBlock"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers><DataTrigger Binding="{Binding Query}" Value=""><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers></Style></TextBlock.Style></TextBlock>
 <Button x:Name="ClearButton" Grid.Column="1" Content="×" Padding="3,0" BorderThickness="0" Click="ClearClick" ToolTipService.IsEnabled="{Binding DataContext.Settings.ShowTooltips, RelativeSource={RelativeSource AncestorType=local:NavigationView}}" ToolTip="清空搜索（Esc）"/>
 </Grid></Border>
+<Button Content="工作表排序 ▾" Click="SortClick" HorizontalAlignment="Left" Margin="0,7,0,0"/>
 <DockPanel Margin="0,7,0,6"><WrapPanel>
 <ToggleButton Content=".*" Padding="8,4" IsChecked="{Binding UseRegex}" Margin="0,0,5,0" ToolTipService.IsEnabled="{Binding DataContext.Settings.ShowTooltips, RelativeSource={RelativeSource AncestorType=local:NavigationView}}" ToolTip="正则表达式：^销售|汇总$" AutomationProperties.Name="正则搜索"/>
 <ToggleButton Content="Aa" Padding="8,4" IsChecked="{Binding MatchCase}" Margin="0,0,5,0" ToolTipService.IsEnabled="{Binding DataContext.Settings.ShowTooltips, RelativeSource={RelativeSource AncestorType=local:NavigationView}}" ToolTip="区分大小写"/>
@@ -35,7 +36,8 @@
 <Grid.ToolTip><StackPanel><TextBlock Text="{Binding Name}" FontWeight="SemiBold"/><TextBlock Text="{Binding WorkbookName}"/><TextBlock Text="{Binding Detail}"/><TextBlock Text="{Binding Hint}"/></StackPanel></Grid.ToolTip>
 <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
 <TextBlock Text="{Binding Number}" Width="24" FontSize="10" Foreground="{DynamicResource MutedBrush}" VerticalAlignment="Center" Visibility="{Binding DataContext.Settings.ShowSheetNumbers, RelativeSource={RelativeSource AncestorType=ListBox}, Converter={StaticResource BoolVisibility}}"/>
-<StackPanel Grid.Column="1" VerticalAlignment="Center"><TextBlock Text="{Binding Name}" FontSize="{Binding DataContext.Settings.FontSize, RelativeSource={RelativeSource AncestorType=ListBox}}" TextTrimming="CharacterEllipsis"/>
+<StackPanel Grid.Column="1" VerticalAlignment="Center"><TextBlock x:Name="SheetNameLabel" Text="{Binding Name}" FontSize="{Binding DataContext.Settings.FontSize, RelativeSource={RelativeSource AncestorType=ListBox}}" TextTrimming="CharacterEllipsis"/>
+<TextBox x:Name="InlineName" Visibility="Collapsed" MaxLength="31" PreviewKeyDown="InlineKey" LostKeyboardFocus="InlineBlur" Padding="1,0"/>
 <TextBlock Text="{Binding WorkbookName}" Foreground="{DynamicResource MutedBrush}" FontSize="10" Margin="0,3,0,0" TextTrimming="CharacterEllipsis" Visibility="{Binding DataContext.ShowWorkbookNames, RelativeSource={RelativeSource AncestorType=ListBox}, Converter={StaticResource BoolVisibility}}"/></StackPanel>
 <TextBlock Grid.Column="2" Text="{Binding Detail}" FontSize="10" Margin="5,0,0,0" VerticalAlignment="Center"><TextBlock.Style><Style TargetType="TextBlock"><Setter Property="Foreground" Value="{DynamicResource MutedBrush}"/><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers>
 <DataTrigger Binding="{Binding DataContext.Settings.ShowSheetType, RelativeSource={RelativeSource AncestorType=ListBox}}" Value="True"><Setter Property="Visibility" Value="Visible"/></DataTrigger>
@@ -66,6 +68,7 @@
 <local:ColorEditor Caption="控件底色" Value="{Binding Settings.SurfaceColor, Mode=TwoWay}"/>
 <local:ColorEditor Caption="主要文字" Value="{Binding Settings.TextColor, Mode=TwoWay}"/>
 <local:ColorEditor Caption="辅助文字" Value="{Binding Settings.MutedTextColor, Mode=TwoWay}"/>
+<local:ColorEditor Caption="鼠标悬停高亮" Value="{Binding Settings.HoverColor, Mode=TwoWay}"/>
 <local:ColorEditor Caption="强调色" Value="{Binding Settings.AccentColor, Mode=TwoWay}"/>
 <TextBlock Text="支持 #RRGGBB 或简写 #RGB；Enter 确认，Esc 撤销输入。" FontSize="10" Foreground="{DynamicResource MutedBrush}" TextWrapping="Wrap" Margin="0,8,0,0"/>
 <TextBlock Text="同步" FontWeight="SemiBold" Foreground="{DynamicResource AccentBrush}" Margin="0,18,0,10"/><CheckBox Content="自动刷新目录" IsChecked="{Binding Settings.AutoRefresh}" Margin="0,7"/><local:NumberEditor x:Name="RefreshSecondsEditor" Caption="刷新间隔（秒）" Minimum="1" Maximum="10" Step="1" Value="{Binding Settings.RefreshSeconds, Mode=TwoWay}"/>

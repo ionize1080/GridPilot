@@ -25,6 +25,8 @@ namespace SheetPilot.Excel
         private FocusOverlay focus;
         private readonly HashSet<PortableWindow> portableWindows=new HashSet<PortableWindow>();
         public int IconTheme => settings.IconTheme;
+        public bool IsFeatureEnabled(string id) => settings.IsEnabled(id);
+        public bool SortMenuEnabled => settings.IsEnabled("GridPilot_Sort") && settings.SortContextMenu;
         private readonly HashSet<Window> windows = new HashSet<Window>();
         private readonly Timer statusTimer = new Timer { Interval = 9000 };
         private object previousStatus;
@@ -43,6 +45,7 @@ namespace SheetPilot.Excel
         public bool CanUndo => gateway.CanUndo;
         internal string PerformanceSummary => focus?.PerformanceSummary ?? "Focus not started";
         public IEnumerable<FeatureCommand> Commands => new[] {
+            new FeatureCommand("GridPilot_Sort", "自定义排序", "中文数字、自定义序列和正则组合；预览后按整条记录排序。", "", () => Run(OpenSort)),
             new FeatureCommand("GridPilot_Reconcile", "监管核对", "两期余额、发放回收、专项关联、差额追溯与变动报告。", "", () => Run(()=>OpenDatabase(true))),
             new FeatureCommand("GridPilot_Database", "报表数据库", "文件夹报表归档、快照与累计去重、可视化和 SQL 查询；在源 Excel 修改后扫描更新。", "", () => Run(()=>OpenDatabase())),
             new FeatureCommand("GridPilot_SimpleMask", "简易脱敏", "选区拼音首字母、固定字符映射、首尾交换、正则和数字运算；预览后复制、导出或写回原表。", "", () => Run(OpenSimpleMask)),
@@ -69,7 +72,22 @@ namespace SheetPilot.Excel
             catch (OperationCanceledException) { Announce("原样复制已取消，未保留未完成的结果工作簿。"); }
         }
         [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern short GetAsyncKeyState(int key);
-        public void Execute(string id) { foreach (var command in Commands) if (command.Id == id) { command.Execute(); return; } }
+        public void Execute(string id) { if(!settings.IsEnabled(id))return; foreach (var command in Commands) if (command.Id == id) { command.Execute(); return; } }
+        private void OpenSort()
+        {
+            var snapshot=gateway.CaptureSort();Func<string> restore=null;
+            Show(new SortWindow(navigation.Settings,settings.Sort,snapshot.Description,snapshot.Headers,snapshot.InitialColumn,
+                (column,header)=>snapshot.Keys(column,header),
+                (column,options)=>{var prior=gateway.UndoOperation;var result=gateway.ApplySort(snapshot,column,options);restore=ReferenceEquals(prior,gateway.UndoOperation)?null:gateway.CaptureUndoAction();settings.Sort=options.Clone();store.Save(settings);Ribbon.Refresh();return result;},false,()=>{var text=restore==null?"本次没有改变顺序。":restore();Ribbon.Refresh();return text;}));
+        }
+        internal void OpenSheetSort(SheetItem source, bool? descending=null)
+        {
+            Func<string> restore=null;var snapshot=gateway.Capture(true);var sheets=snapshot.Sheets.Where(s=>s.WorkbookKey==source.WorkbookKey).ToArray();
+            var options=settings.Sort.Clone();if(descending.HasValue){options.Natural=true;options.Descending=descending.Value;}
+            Show(new SortWindow(navigation.Settings,options,source.WorkbookName+" · 全部 "+sheets.Length+" 个标签（包含隐藏页与图表页）",new string[0],0,
+                (column,header)=>sheets.Select(s=>s.Name).ToArray(),
+                (column,sort)=>{var result=gateway.SortSheets(sheets,sort);restore=gateway.CaptureUndoAction();settings.Sort=sort.Clone();store.Save(settings);navigation.Refresh();Ribbon.Refresh();return result;},true,()=>{var text=restore==null?"本次没有改变顺序。":restore();navigation.Refresh();Ribbon.Refresh();return text;}));
+        }
         private void OpenRename()
         {
             var working = new ToolPreferences { Rename = settings.Rename.Clone() };
@@ -215,7 +233,11 @@ namespace SheetPilot.Excel
         private void Show(Window window)
         {
             new WindowInteropHelper(window).Owner = ExcelDnaUtil.WindowHandle;
-            windows.Add(window); try { window.ShowDialog(); } finally { windows.Remove(window); }
+            windows.Add(window);
+            window.Closed+=(s,e)=>{windows.Remove(window);if(!disposed)WorksheetFocus.Restore(ExcelDnaUtil.WindowHandle);};
+            try { window.Show(); } catch { windows.Remove(window);throw; }
+            // Return the Excel-DNA macro before the user interacts. A nested ShowDialog
+            // keeps SyncMacro alive while Office may already unload the add-in.
         }
         private void Announce(string text)
         {

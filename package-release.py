@@ -3,9 +3,9 @@ from pathlib import Path
 import gzip, hashlib, html.parser, json, shutil, zipfile
 
 ROOT = Path(__file__).resolve().parent
-VERSION = '1.4.0'
+VERSION = '1.5.0'
 OUT = ROOT / ('release-v' + VERSION)
-DOCS = ['README.txt', 'RELEASE-v1.4.0.md', 'COMPATIBILITY.txt', 'COPYING.txt', 'MASKING.txt', 'SEGMENTATION.txt', 'VALIDATION.txt', 'SETTINGS.txt', 'DATABASE.txt', 'SIMPLE-MASKING.txt','RECONCILIATION.txt', 'UNICODE-LICENSE.txt', 'Check-Environment.ps1', 'EXCEL-DNA-LICENSE.txt', 'JIEBA-NET-LICENSE.txt', 'JIEBA-LICENSE.txt', 'NEWTONSOFT-JSON-LICENSE.txt', 'THIRD-PARTY-NOTICES.txt']
+DOCS = ['README.txt', 'RELEASE-v1.5.0.md', 'COMPATIBILITY.txt', 'COPYING.txt', 'MASKING.txt', 'SEGMENTATION.txt', 'VALIDATION.txt', 'SETTINGS.txt', 'DATABASE.txt', 'SIMPLE-MASKING.txt','RECONCILIATION.txt','SORTING.txt', 'UNICODE-LICENSE.txt', 'Check-Environment.ps1', 'EXCEL-DNA-LICENSE.txt', 'JIEBA-NET-LICENSE.txt', 'JIEBA-LICENSE.txt', 'NEWTONSOFT-JSON-LICENSE.txt', 'THIRD-PARTY-NOTICES.txt']
 
 class Text(html.parser.HTMLParser):
     def __init__(self):
@@ -37,7 +37,7 @@ def package():
         base = OUT / ('GridPilot-' + VERSION + '-' + suffix)
         # Never silently package stale output from an earlier attempt.
         if base.exists():
-            assert base.resolve().parent == OUT.resolve() and base.name.startswith('GridPilot-1.4.0-')
+            assert base.resolve().parent == OUT.resolve() and base.name.startswith('GridPilot-1.5.0-')
             shutil.rmtree(base)
         base.mkdir()
         for file in (ROOT / 'dist').iterdir():

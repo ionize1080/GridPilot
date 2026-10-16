@@ -35,6 +35,16 @@ async function test(mode) {
     const page = await application.firstWindow(); const errors = []; page.on('pageerror', e => errors.push(e.message));
     await page.getByRole('button', { name: mode === 'mask' ? '分析与预览' : '保存设置', exact: true }).waitFor();
     if (mode === 'settings') {
+      await page.getByRole('button',{name:'功能开关',exact:true}).click();
+      assert.equal(await page.locator('[id^="feature-"]').count(),12);
+      const before=await page.locator('[id^="feature-"]').evaluateAll(xs=>xs.map(x=>x.id));
+      await page.locator('#feature-Sort').check();await page.locator('#feature-Mask').check();await page.locator('#sort-context-menu').uncheck();
+      await page.getByRole('button',{name:'保存设置',exact:true}).click();await page.locator('#status').filter({hasText:'已保存'}).waitFor();
+      assert.deepEqual(lastRequest.settings.EnabledFeatures,['GridPilot_Sort','GridPilot_Mask']);assert.equal(lastRequest.settings.SortContextMenu,false);
+      await page.locator('#feature-Mask').uncheck();await page.getByRole('button',{name:'保存设置',exact:true}).click();await page.locator('#status').filter({hasText:'已保存'}).waitFor();
+      assert.deepEqual(lastRequest.settings.EnabledFeatures,['GridPilot_Sort']);assert.deepEqual(await page.locator('[id^="feature-"]').evaluateAll(xs=>xs.map(x=>x.id)),before);
+      fs.mkdirSync(path.join(root,'docs/v1.5'),{recursive:true});await page.locator('#content').evaluate(e=>e.scrollTop=0);await page.screenshot({path:path.join(root,'docs/v1.5/settings.png')});
+      console.log('PASS optional feature switches, disable/re-enable persistence, fixed order and independent context menu');
       await page.getByRole('button', { name: '聚焦与涟漪', exact: true }).click();
       for (const value of ['320', '460']) {
         await page.locator('#setting-RippleDuration').fill(value);

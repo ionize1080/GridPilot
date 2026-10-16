@@ -3,6 +3,7 @@
  <ItemGroup>
   <ProjectReference Include="../../src/SheetPilot.Core/SheetPilot.Core.csproj"/>
   <ProjectReference Include="../../src/SheetPilot.UI/SheetPilot.UI.csproj"/>
+  <Compile Include="../../src/SheetPilot.Excel/SortOperations.cs" Link="SortOperations.cs"/>
   <Compile Include="../../src/SheetPilot.Excel/ReportReader.cs" Link="ReportReader.cs"/><Compile Include="../../src/SheetPilot.Excel/NavigationEditing.cs" Link="NavigationEditing.cs"/>
   <Compile Include="../../src/SheetPilot.Excel/ExcelGateway.cs" Link="ExcelGateway.cs"/>
   <Compile Include="../../src/SheetPilot.Excel/WorkbookOperations.cs" Link="WorkbookOperations.cs"/>
@@ -17,7 +18,7 @@
   <Compile Include="../../src/SheetPilot.Excel/FocusOverlay.cs" Link="FocusOverlay.cs"/>
   <Compile Include="../../src/SheetPilot.Excel/ExcelEvents.cs" Link="ExcelEvents.cs"/>
   <Compile Include="../../src/SheetPilot.Excel/RibbonIcons.cs" Link="RibbonIcons.cs"/>
-  <Reference Include="Microsoft.CSharp"/>
+  <Reference Include="System.Numerics"/><Reference Include="Microsoft.CSharp"/>
   <Reference Include="Microsoft.VisualBasic"/>
   <Reference Include="System.IO.Compression"/>
   <Reference Include="System.IO.Compression.FileSystem"/>

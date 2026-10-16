@@ -12,7 +12,7 @@ namespace SheetPilot.UI
             var background = Parse(settings.BackgroundColor); var text = Parse(settings.TextColor); var accent = Parse(settings.AccentColor);
             Put(resources, "CanvasBrush", background); Put(resources, "SurfaceBrush", Parse(settings.SurfaceColor));
             Put(resources, "TextBrush", text); Put(resources, "MutedBrush", Parse(settings.MutedTextColor)); Put(resources, "AccentBrush", accent);
-            Put(resources, "BorderBrush", Blend(background, text, .22)); Put(resources, "HoverBrush", Blend(background, accent, .10));
+            Put(resources, "BorderBrush", Blend(background, text, .22)); Put(resources, "HoverBrush", Parse(settings.HoverColor));
             Put(resources, "SelectedBrush", Blend(background, accent, .20));
             double luminance = .2126 * Linear(accent.R) + .7152 * Linear(accent.G) + .0722 * Linear(accent.B);
             Put(resources, "AccentTextBrush", luminance > .179 ? Colors.Black : Colors.White);

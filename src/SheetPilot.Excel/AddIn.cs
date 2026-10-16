@@ -26,22 +26,23 @@ namespace SheetPilot.Excel
         internal static void Shutdown()
         {
             if (Features == null) return;
-            try { Features?.Dispose(); }
+            var modules=Features;Features=null; // Re-entrant shutdown callbacks must be harmless.
+            var watch=System.Diagnostics.Stopwatch.StartNew();
+            try { modules.Dispose(); }
             catch (Exception ex) { Log.Error("Unload", ex); }
             finally
             {
-                Features = null; Navigation = null; Tools = null; Log.Write("Unloaded");
-                // Unreachable Office RCWs can otherwise survive in an idle automation host.
-                // Do not block the Excel STA: COM finalizers may need to marshal back to it.
-                System.Threading.ThreadPool.QueueUserWorkItem(_ =>
-                {
-                    GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
-                });
+                Navigation=null;Tools=null;
+                // Queue unreachable Office RCWs for release while the STA still pumps.
+                // Do not wait for finalizers here: they may need to marshal to this STA.
+                GC.Collect();
+                Log.Write("Unloaded; managed cleanup ms="+watch.ElapsedMilliseconds);
             }
         }
         [ExcelCommand(Name = "SheetPilot_ShowNavigation", Description = "显示 GridPilot 工作表导航")]
         public static void ShowNavigation() => Guard(() => Navigation?.Show());
         [ExcelCommand(Name = "GridPilot_ShowNavigation")] public static void GridPilotNavigation() => ShowNavigation();
+        [ExcelCommand(Name = "GridPilot_Sort")] public static void Sort() => Guard(() => Tools?.Execute("GridPilot_Sort"));
         [ExcelCommand(Name = "GridPilot_Rename")] public static void Rename() => Guard(() => Tools?.Execute("GridPilot_Rename"));
         [ExcelCommand(Name = "GridPilot_Focus")] public static void Focus() => Guard(() => Tools?.Execute("GridPilot_Focus"));
         [ExcelCommand(Name = "GridPilot_Text")] public static void Text() => Guard(() => Tools?.Execute("GridPilot_Text"));
@@ -78,6 +79,9 @@ namespace SheetPilot.Excel
         public override object LoadImage(string imageId) => RibbonIcons.Get(imageId, ExcelDnaUtil.WindowHandle);
         public object GetImage(IRibbonControl control) => RibbonIcons.Picture(control.Id, ExcelDnaUtil.WindowHandle, AddIn.Tools?.IconTheme ?? 0);
         public bool GetPressed(IRibbonControl control) => AddIn.Tools?.FocusEnabled == true;
+        public bool GetVisible(IRibbonControl control) => AddIn.Tools?.IsFeatureEnabled(control.Id) ?? true;
+        public bool GetSortMenuVisible(IRibbonControl control) => AddIn.Tools?.SortMenuEnabled == true;
+        public void OnContextSort(IRibbonControl control) => AddIn.Guard(() => AddIn.Tools?.Execute("GridPilot_Sort"));
         public bool GetEnabled(IRibbonControl control) => control.Id != "GridPilot_Undo" || AddIn.Tools?.CanUndo == true;
         public void OnToggle(IRibbonControl control, bool pressed) => OnCommand(control);
 
@@ -105,15 +109,19 @@ namespace SheetPilot.Excel
                         bool toggle = command.Id == "GridPilot_Focus";
                         var button = new XElement(ns + (toggle ? "toggleButton" : "button"), new XAttribute("id", command.Id), new XAttribute("label", command.Label),
                             new XAttribute("size", "large"), new XAttribute("getImage", "GetImage"), new XAttribute("screentip", command.Label),
-                            new XAttribute("supertip", command.Description), new XAttribute("getEnabled", "GetEnabled"), new XAttribute("onAction", toggle ? "OnToggle" : "OnCommand"));
+                            new XAttribute("supertip", command.Description), new XAttribute("getEnabled", "GetEnabled"), new XAttribute("getVisible", "GetVisible"), new XAttribute("onAction", toggle ? "OnToggle" : "OnCommand"));
                         if (toggle) button.Add(new XAttribute("getPressed", "GetPressed"));
                         group.Add(button);
                     }
                     tab.Add(group);
                 }
-            return new XElement(ns + "customUI", new XAttribute("loadImage", "LoadImage"), new XAttribute("onLoad", "OnLoad"), new XElement(ns + "ribbon", new XElement(ns + "tabs", tab))).ToString();
+            var menus=new XElement(ns+"contextMenus");
+            foreach(string id in new[]{"ContextMenuCell","ContextMenuListRange"})
+                menus.Add(new XElement(ns+"contextMenu",new XAttribute("idMso",id),
+                    new XElement(ns+"button",new XAttribute("id","GridPilot_Sort_"+id),new XAttribute("label","GridPilot · 自定义排序…"),new XAttribute("getVisible","GetSortMenuVisible"),new XAttribute("getImage","GetImage"),new XAttribute("onAction","OnContextSort"))));
+            return new XElement(ns + "customUI", new XAttribute("loadImage", "LoadImage"), new XAttribute("onLoad", "OnLoad"), new XElement(ns + "ribbon", new XElement(ns + "tabs", tab)),menus).ToString();
         }
-        public void OnCommand(IRibbonControl control) => AddIn.Guard(() => AddIn.Features?.Execute(control.Id));
+        public void OnCommand(IRibbonControl control) => AddIn.Guard(() => { if(AddIn.Tools?.IsFeatureEnabled(control.Id)==true)AddIn.Features?.Execute(control.Id); });
     }
 
     internal static class Log

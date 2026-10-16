@@ -1,8 +1,8 @@
 # GridPilot
 
-Windows 桌面 Excel 的便携工具集。当前版本 **1.4.0**。
+Windows 桌面 Excel 的便携工具集。当前版本 **1.5.0**。
 
-[下载完整便携包](https://github.com/ionize1080/GridPilot/releases/tag/v1.4.0) · [更新说明](RELEASE-v1.4.0.md) · [验证记录](VALIDATION.txt) · [数据库设计](docs/v1.1/DESIGN.md)
+[下载完整便携包](https://github.com/ionize1080/GridPilot/releases/tag/v1.5.0) · [更新说明](RELEASE-v1.5.0.md) · [验证记录](VALIDATION.txt) · [数据库设计](docs/v1.1/DESIGN.md)
 
 新版脱敏与总设置采用独立 Chromium 窗口，免安装、离线运行、按需启动。导航保留轻量原生任务面板。XLL、业务 DLL、词典和浏览器已拆分，**必须完整解压，不能单独复制 XLL**。
 
@@ -15,6 +15,18 @@ Windows 桌面 Excel 的便携工具集。当前版本 **1.4.0**。
 3. 升级时退出 Excel，保留 `GridPilot.navigation.json` 和 `GridPilot.tools.json`。新旧版本不要同时加载。
 
 本机验证环境是 Windows 11 + Excel 16 x64。**Win10 21H1 + Excel 2010、32 位 Excel 尚未实机验收**。构建基线与兼容路径保留，但不能把新版 Excel 的测试结果视为旧版验收。
+
+## v1.5 按需功能与自定义排序
+
+总设置 → **功能开关**：导航与聚焦始终可用，其余工具默认关闭，按需开启。保存后 Ribbon 立即更新，排列顺序固定；设置入口始终保留。升级保留既有配色和其他选项。
+
+自定义排序支持完整中文数字、大中小微、自定义命名序列，以及 `(国际)[中文数字]` / `(业务)[中文数字]` 等逐行优先规则。Excel 原生单元格与表格右键菜单提供入口，可在设置中独立关闭；筛选箭头下拉框不修改。预览范围包含完整记录，调用 Excel 原生排序保留公式和格式，窗口内可恢复原序。
+
+导航支持名称自然升降序、同一套自定义规则、右键 / F2 原地重命名、Enter 保存、Esc 取消，以及自定义鼠标悬停颜色。
+
+移除退出阶段的强制终结器等待；工具窗口改为非模态，避免 Excel 关闭时仍有未返回的窗口回调。详见 [排序说明](SORTING.txt) 和 [验证记录](VALIDATION.txt)。
+
+![排序预览，合成数据](docs/v1.5/sort.png)
 
 ## v1.4 监管核对与变动报告
 

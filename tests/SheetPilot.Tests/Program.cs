@@ -25,6 +25,10 @@ internal static partial class Program
             if(args.Length==0 && Path.GetFileNameWithoutExtension(System.Reflection.Assembly.GetExecutingAssembly().Location).Contains("Compatibility")) return CompatibilityRunner();
             if(args.Length>0&&args[0]=="--reconcile-json"){Console.OutputEncoding=new System.Text.UTF8Encoding(false);Console.WriteLine(Newtonsoft.Json.JsonConvert.SerializeObject(ReportReader.Read(args[1],args.Length>2?args[2]:null,0,CancellationToken.None,true)));return 0;}
             if(args.Length>0&&args[0]=="--report-json"){Console.OutputEncoding=new System.Text.UTF8Encoding(false);Console.WriteLine(Newtonsoft.Json.JsonConvert.SerializeObject(ReportReader.Read(args[1],args.Length>2?args[2]:null,0,CancellationToken.None)));return 0;}
+            if(args.Length>1&&args[0]=="--full-sample"){FullSampleMaskTest(args[1]);return 0;}
+            if(args.Length>1&&args[0]=="--sort-ui"){SortUiLaunch(args[1]);return 0;}
+            if(args.Length>1&&args[0]=="--shutdown"){ShutdownTiming(args[1],args.Length>2?args[2]:null);return 0;}
+            if(args.Length>0&&args[0]=="--sort"){SortTests();if(args.Contains("--excel"))SortExcelTests();Console.WriteLine("PASS "+checks+" assertions");return 0;}
             Console.WriteLine("Test process: " + (Environment.Is64BitProcess ? "x64" : "x86"));
             if(args.Length>1&&args[0]=="--reconcile-launch"){V11Launch(Path.GetFullPath(args[1]),"GridPilot_Reconcile");Console.WriteLine("PASS "+checks+" assertions");return 0;}
             if(args.Length>1&&args[0]=="--simple-launch"){V11Launch(Path.GetFullPath(args[1]),"GridPilot_SimpleMask");Console.WriteLine("PASS "+checks+" assertions");return 0;}
@@ -40,6 +44,7 @@ internal static partial class Program
             if (args.Length > 0 && args[0] == "--copy-excel") { int pid = CopyExcelTests(args.Length > 1 ? Path.GetFullPath(args[1]) : null); CopyExcelExitCheck(pid); return 0; }
             if(args.Length>0 && args[0]=="--upgrade") { UpgradeCoreTests(); if(args.Length>2)UpgradeExcelTests(args[1],args[2]);Console.WriteLine("PASS "+checks+" assertions");return 0;}
             if(args.Length>0 && args[0]=="--upgrade-excel") {UpgradeCoreTests();string temporary=Path.Combine(Path.GetTempPath(),"GridPilot-upgrade-"+Guid.NewGuid().ToString("N"));string samples=Path.Combine(temporary,"samples");Directory.CreateDirectory(samples);UpgradeExcelTests(samples,Path.Combine(temporary,"output"));Console.WriteLine("PASS "+checks+" assertions");return 0;}
+            SortTests();
             SimpleMaskCoreTests();SimpleHeaderTests();
             SearchTests();
             SettingsTests();

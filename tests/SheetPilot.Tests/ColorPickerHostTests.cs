@@ -33,7 +33,7 @@ internal static partial class Program
                 PumpUntil(() => view.IsLoaded);
                 view.UpdateLayout();
                 var editors = PickerDescendants(view).OfType<ColorEditor>().ToArray();
-                Check(editors.Length == 5, "picker: all five navigation color editors are present");
+                Check(editors.Length == 6, "picker: all six navigation color editors are present");
                 foreach (var editor in editors)
                 {
                     editor.BringIntoView();

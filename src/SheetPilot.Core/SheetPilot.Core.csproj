@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup><TargetFramework>net462</TargetFramework></PropertyGroup>
-  <ItemGroup><Reference Include="System.Runtime.Serialization" /></ItemGroup>
+  <ItemGroup><Reference Include="System.Runtime.Serialization" /><Reference Include="System.Numerics" /></ItemGroup>
   <ItemGroup>
     <PackageReference Include="jieba.NET" Version="0.42.2" GeneratePathProperty="true" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />

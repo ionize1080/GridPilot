@@ -138,8 +138,10 @@ namespace SheetPilot.Core
         }
         public void Dispose()
         {
-            try { for (int i = modules.Count - 1; i >= 0; i--) modules[i].Dispose(); }
+            var errors=new List<Exception>();
+            try { for (int i = modules.Count - 1; i >= 0; i--) { try { modules[i].Dispose(); } catch(Exception ex) { errors.Add(ex); } } }
             finally { modules.Clear(); commands.Clear(); }
+            if(errors.Count>0)throw new AggregateException("Feature cleanup failed.",errors);
         }
     }
 }

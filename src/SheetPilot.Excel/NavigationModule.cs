@@ -184,7 +184,7 @@ namespace SheetPilot.Excel
             ExcelAsyncUtil.QueueAsMacro(()=>
             {
                 session.NavigationPending=false;if(disposed||session.Disposed)return;
-                try{if(!(gateway is ExcelGateway excel))throw new InvalidOperationException("当前环境不支持编辑工作表。");excel.EditSheet(request);Refresh();}
+                try{if(request.Action.StartsWith("sort",StringComparison.Ordinal)){AddIn.Tools?.OpenSheetSort(request.Source,request.Action=="sortAsc"?(bool?)false:request.Action=="sortDesc"?(bool?)true:null);return;}if(!(gateway is ExcelGateway excel))throw new InvalidOperationException("当前环境不支持编辑工作表。");excel.EditSheet(request);Refresh();}
                 catch(Exception ex){session.Model.Report(ex is InvalidOperationException?ex.Message:"Excel 无法完成操作，请结束编辑并检查工作簿保护状态。");Log.Error("Edit sheet",ex);}
             });
         }

@@ -15,6 +15,12 @@ namespace SheetPilot.Excel
         public void ReleaseUndoEvents(){undoEvents?.Dispose();undoEvents=null;undo=null;}
         private void WatchUndo(){if(undoEvents==null){undoEvents=new ExcelEvents(application());undoEvents.Change(()=>{if(undo!=null)undoInvalidated=true;undo=null;});}}
         public bool CanUndo => undo != null;
+        internal Func<string> UndoOperation => undo;
+        internal Func<string> CaptureUndoAction()
+        {
+            var expected=undo;
+            return ()=>{if(expected==null||!ReferenceEquals(undo,expected))throw new InvalidOperationException("后续操作已替换或使本次撤销失效。");return UndoLast();};
+        }
         public string UndoLast()
         {
             CheckThread(); if (undo == null) {if(undoInvalidated)throw new InvalidOperationException("工作表已发生外部编辑，上次撤销已失效。");return "没有可撤销的 GridPilot 操作。";}

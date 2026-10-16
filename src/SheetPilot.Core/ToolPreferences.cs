@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Runtime.Serialization;
 using System.Runtime.Serialization.Json;
@@ -50,6 +50,10 @@ namespace SheetPilot.Core
         [DataMember] public int RippleDuration { get; set; } = 280;
         [DataMember] public int RippleWidth { get; set; } = 36;
         [DataMember] public int RippleStrength { get; set; } = 24;
+        [DataMember] public string[] EnabledFeatures { get; set; } = new string[0];
+        [DataMember] public bool SortContextMenu { get; set; } = true;
+        [DataMember] public SortOptions Sort { get; set; } = new SortOptions();
+        public bool IsEnabled(string id) => id == "GridPilot_Settings" || id == "GridPilot_Focus" || id.StartsWith("SheetPilot_", StringComparison.Ordinal) || Array.IndexOf(EnabledFeatures ?? new string[0], id) >= 0;
         [DataMember] public int IconTheme { get; set; }
         [DataMember] public bool MaskReplaceMentions { get; set; } = true;
         [DataMember] public bool MaskPreserveFormatting { get; set; } = true;
@@ -64,9 +68,11 @@ namespace SheetPilot.Core
         [DataMember] public int ConversionLimit { get; set; } = 50000;
         [DataMember] public int DecimalCulture { get; set; }
         [OnDeserializing] private void Initialize(StreamingContext c)
-        { FocusRipple = MaskPreserveFormatting = MaskReplaceMentions = true; RippleDuration=280; RippleWidth=36; RippleStrength=24; SchemaVersion = 1; Rename = new RenameOptions(); FocusColor = "#42AD91"; FocusOpacity = 20; FocusInterval = 33; PreserveVisualAlignment = FocusRow = FocusColumn = ClearActiveCell = PreserveLeadingZeros = ProtectPrecision = TrimNumericText = AllowThousands = NumberAsTextHint = true; ConversionLimit = 50000; }
+        { EnabledFeatures=new string[0]; SortContextMenu=true; Sort=new SortOptions(); FocusRipple = MaskPreserveFormatting = MaskReplaceMentions = true; RippleDuration=280; RippleWidth=36; RippleStrength=24; SchemaVersion = 1; Rename = new RenameOptions(); FocusColor = "#42AD91"; FocusOpacity = 20; FocusInterval = 33; PreserveVisualAlignment = FocusRow = FocusColumn = ClearActiveCell = PreserveLeadingZeros = ProtectPrecision = TrimNumericText = AllowThousands = NumberAsTextHint = true; ConversionLimit = 50000; }
         public void Normalize()
         {
+            if(EnabledFeatures==null)EnabledFeatures=new string[0];
+            if(Sort==null)Sort=new SortOptions();
             IconTheme=Math.Max(0,Math.Min(2,IconTheme)); RippleDuration=Math.Max(120,Math.Min(600,RippleDuration)); RippleWidth=Math.Max(12,Math.Min(100,RippleWidth)); RippleStrength=Math.Max(5,Math.Min(50,RippleStrength));
             if (Copy == null) Copy = new CopyOptions();
             Copy.Normalize();
