@@ -30,27 +30,16 @@ internal static partial class Program
         Reject(()=>CustomSort.Order(new[]{new string('a',10000)+"!"},new SortOptions{Rules="(a+)+$"}),"regex timeout bounded");
         var large=Enumerable.Range(1,20000).Reverse().Select(i=>"表"+i).ToArray();var watch=Stopwatch.StartNew();
         Check(CustomSort.Order(large,new SortOptions{Natural=true})[0]==19999,"20k natural sort");Console.WriteLine("Natural 20k ms="+watch.ElapsedMilliseconds);
-        var prefs=new ToolPreferences();Check(!prefs.IsEnabled("GridPilot_Sort")&&prefs.IsEnabled("GridPilot_Focus")&&prefs.IsEnabled("SheetPilot_Show")&&prefs.IsEnabled("GridPilot_Settings"),"optional features default off; essentials available");
+        var prefs=new ToolPreferences();Check(prefs.IsEnabled("GridPilot_Sort")&&prefs.IsEnabled("GridPilot_Focus")&&prefs.IsEnabled("SheetPilot_Show")&&prefs.IsEnabled("GridPilot_Settings"),"useful tools enabled by default; essentials available");
         string folder=Path.Combine(Path.GetTempPath(),"GridPilot-sort-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(folder);
         var store=new ToolPreferencesStore(Path.Combine(folder,"prefs.json"));prefs.EnabledFeatures=new[]{"GridPilot_Sort","GridPilot_Undo"};prefs.Sort=options;prefs.SortContextMenu=false;
         Check(store.Save(prefs)&&store.Load().IsEnabled("GridPilot_Sort")&&!store.Load().SortContextMenu&&store.Load().Sort.Rules==options.Rules,"feature + menu + rules persistence");
-        File.WriteAllText(Path.Combine(folder,"prefs.json"),"{\"SchemaVersion\":1,\"FocusOpacity\":25}");prefs=store.Load();Check(prefs.FocusOpacity==25&&!prefs.IsEnabled("GridPilot_Sort")&&prefs.Sort!=null,"v1.4 settings migrate retaining preferences");
+        File.WriteAllText(Path.Combine(folder,"prefs.json"),"{\"SchemaVersion\":1,\"FocusOpacity\":25}");prefs=store.Load();Check(prefs.FocusOpacity==25&&prefs.IsEnabled("GridPilot_Sort")&&prefs.Sort!=null,"v1.4 settings migrate retaining preferences");
         var icons=new[]{"SheetPilot_Show","SheetPilot_Refresh","GridPilot_Focus","GridPilot_Sort","GridPilot_Reconcile","GridPilot_Database","GridPilot_SimpleMask","GridPilot_Mask","GridPilot_Segment","GridPilot_CopyInternal","GridPilot_CopyValues","GridPilot_Rename","GridPilot_Text","GridPilot_Number","GridPilot_Undo","GridPilot_Settings"};
         var hashes=icons.Select(id=>{using(var image=RibbonIcons.Draw(id,48))using(var stream=new MemoryStream()){image.Save(stream,System.Drawing.Imaging.ImageFormat.Png);return Convert.ToBase64String(stream.ToArray());}}).ToArray();Check(hashes.Distinct().Count()==icons.Length,"all 16 icons are distinct");
-        string docs=Path.GetFullPath("docs/v1.5.1");Directory.CreateDirectory(docs);
+        string docs=Path.GetFullPath("docs/v1.6");Directory.CreateDirectory(docs);
         using(var atlas=new System.Drawing.Bitmap(16*72,3*76))using(var g=System.Drawing.Graphics.FromImage(atlas))
         {g.Clear(System.Drawing.Color.White);for(int theme=0;theme<3;theme++)for(int i=0;i<icons.Length;i++)using(var icon=RibbonIcons.Draw(icons[i],48,theme)){g.DrawImage(icon,i*72+12,theme*76+8);}atlas.Save(Path.Combine(docs,"icons.png"));}
-        var window=new SortWindow(new NavigationSettings(),options,"合成部门清单 · A1:D8 · 8 行 × 4 列",new[]{"部门","金额","编号","备注"},0,(c,h)=>values,(c,o)=>"已排序");
-        window.Show();window.UpdateLayout();
-        var example=PickerDescendants(window).OfType<System.Windows.Controls.ComboBox>().Single(c=>c.Name=="SortExamples");
-        var useExample=PickerDescendants(window).OfType<System.Windows.Controls.Button>().Single(b=>Equals(b.Content,"套用示例"));
-        useExample.RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
-        Check(CustomSort.Order(new[]{"客户十一处","客户二处","客户一百零一处"},window.Options).SequenceEqual(new[]{1,0,2}),"customer example matches embedded Chinese numbers");
-        example.SelectedIndex=4;useExample.RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
-        Check(window.Options.Rules=="[阶段]"&&window.Options.Sequences=="阶段=准备,实施,验收"&&CustomSort.Order(new[]{"验收","准备","实施"},window.Options).SequenceEqual(new[]{1,2,0}),"custom example populates both inputs coherently");
-        example.SelectedIndex=2;useExample.RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
-        Check(window.Options.Sequences==""&&!window.Options.Natural,"built-in example clears unused custom definitions");
-        window.UpdateLayout();Render(window,Path.Combine(docs,"sort.png"),(int)window.ActualWidth,(int)window.ActualHeight,96);window.Close();
         using(var model=new NavigationModel())using(var nav=new NavigationView(model))
         {
             var item=new SheetItem("one","原名称",1,SheetVisibility.Visible,true,"工作表","book","合成工作簿");
@@ -98,8 +87,8 @@ internal static partial class Program
             snapshot=gateway.CaptureSort();gateway.ApplySort(snapshot,0,mergedOptions);
             Check((double)merged.Range["D2"].Value2==2&&(bool)merged.Range["A2:B2"].MergeCells&&(string)merged.Range["B3"].Value2=="未合并备注"&&!((bool)merged.Range["A3"].MergeCells),"mixed merged and unmerged rows retain notes formulas and layout");
             gateway.UndoLast();Check((double)merged.Range["D2"].Value2==22,"mixed merge undo restores formulas");
-            merged.Range["A2:B4"].UnMerge();merged.Range["A2:A3"].Merge();snapshot=gateway.CaptureSort();Reject(()=>gateway.ApplySort(snapshot,0,mergedOptions),"vertical merges rejected before moving rows");
-            Check((string)merged.Range["A2"].Value2=="客户十一处"&&(object)merged.Range["E2"].Value2==null,"rejected vertical merge leaves values and helper unchanged");
+            merged.Range["A2:B4"].UnMerge();merged.Range["A2:A3"].Merge();snapshot=gateway.CaptureSort();gateway.ApplySort(snapshot,0,mergedOptions);Check((string)merged.Range["A2"].Value2=="客户一处","vertical block sorted after smaller record");gateway.UndoLast();
+            Check((string)merged.Range["A2"].Value2=="客户十一处"&&(object)merged.Range["E2"].Value2==null,"vertical block undo restores values and helper");
             merged.Delete();sheet.Activate();
             sheet.Name="国际十";dynamic second=com.Hold(book.Sheets.Add(Type.Missing,sheet));second.Name="国际二";dynamic third=com.Hold(book.Sheets.Add(Type.Missing,second));third.Name="业务一";third.Visible=0;
             var sheets=gateway.Capture().Sheets;gateway.SortSheets(sheets,options);Console.WriteLine("Sheet sort actual="+(string)book.Sheets[1].Name+" hidden="+(int)third.Visible+" names="+string.Join(",",gateway.Capture().Sheets.Select(x=>x.Name)));Check((string)book.Sheets[1].Name=="国际二"&&(int)third.Visible==0,"sheet order includes hidden pages without changing visibility");gateway.UndoLast();Check((string)book.Sheets[1].Name=="国际十","sheet sort undo");

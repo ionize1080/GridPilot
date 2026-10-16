@@ -18,6 +18,7 @@ namespace SheetPilot.Core
         [DataMember] public bool HasHeader { get; set; } = true;
         [DataMember] public bool MatchCase { get; set; }
         [DataMember] public bool Natural { get; set; }
+        [DataMember] public bool Alphabetical { get; set; }
         public SortOptions Clone() => (SortOptions)MemberwiseClone();
         [OnDeserializing] private void Init(StreamingContext c) { Rules="[中文数字]"; Sequences=""; HasHeader=true; }
     }
@@ -50,6 +51,12 @@ namespace SheetPilot.Core
         public static int[] Order(IReadOnlyList<string> values, SortOptions options) => Order(values,options,out _);
         public static int[] Order(IReadOnlyList<string> values, SortOptions options,out int matched)
         {
+            var ranks=Ranks(values,options,out matched);
+            return Enumerable.Range(0,values.Count).OrderBy(i=>ranks[i]).ToArray();
+        }
+        // Equal semantic keys share a rank, allowing the next level to break ties.
+        public static int[] Ranks(IReadOnlyList<string> values, SortOptions options,out int matched)
+        {
             if(options==null)throw new ArgumentNullException(nameof(options));
             if(values.Count>200000)throw new InvalidOperationException("一次最多排序 200,000 行。");
             var rules=Compile(options);var clock=Stopwatch.StartNew();var keys=new List<Key>(values.Count);
@@ -77,20 +84,24 @@ namespace SheetPilot.Core
                 }
             }
             catch(RegexMatchTimeoutException){throw new InvalidOperationException("正则匹配超时，请简化嵌套或重复表达式。");}
-            matched=options.Natural?values.Count:keys.Count(k=>k.Group<rules.Count);
-            keys.Sort((a,b)=>
+            matched=options.Natural||options.Alphabetical?values.Count:keys.Count(k=>k.Group<rules.Count);
+            Comparison<Key> compare=(a,b)=>
             {
                 int n=a.Group.CompareTo(b.Group);if(n!=0)return n; // Rule priority is explicit, independent of direction.
-                if(options.Natural)n=NaturalCompare(a.NaturalParts,b.NaturalParts,options.MatchCase);
+                if(options.Alphabetical)n=CultureInfo.GetCultureInfo("zh-CN").CompareInfo.Compare(a.Text,b.Text,options.MatchCase?CompareOptions.None:CompareOptions.IgnoreCase);
+                else if(options.Natural)n=NaturalCompare(a.NaturalParts,b.NaturalParts,options.MatchCase);
                 else for(int j=0;j<a.Values.Count&&n==0;j++)n=a.Values[j].CompareTo(b.Values[j]);
                 if(n!=0)return options.Descending?-Math.Sign(n):Math.Sign(n);
-                return a.Index.CompareTo(b.Index);
-            });
-            return keys.Select(k=>k.Index).ToArray();
+                return 0;
+            };
+            keys.Sort((a,b)=>{int n=compare(a,b);return n==0?a.Index.CompareTo(b.Index):n;});
+            var ranks=new int[values.Count];int rank=0;
+            for(int i=0;i<keys.Count;i++){if(i>0&&compare(keys[i-1],keys[i])!=0)rank++;ranks[keys[i].Index]=rank;}
+            return ranks;
         }
         private static List<Rule> Compile(SortOptions options)
         {
-            var result=new List<Rule>();if(options.Natural)return result;
+            var result=new List<Rule>();if(options.Natural||options.Alphabetical)return result;
             if((options.Rules??"").Length>8192 || (options.Sequences??"").Length>8192)throw new InvalidOperationException("规则或自定义序列最多 8192 字符。");
             var comparison=options.MatchCase?StringComparer.Ordinal:StringComparer.OrdinalIgnoreCase;
             var sequences=new Dictionary<string,string[]>(StringComparer.Ordinal){{"大中小微",new[]{"大","中","小","微"}}};

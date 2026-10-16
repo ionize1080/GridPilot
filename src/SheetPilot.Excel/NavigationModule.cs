@@ -156,7 +156,7 @@ namespace SheetPilot.Excel
         }
         private void Navigate(PaneSession session, SheetItem item)
         {
-            if (disposed || session.NavigationPending) return;
+            if (disposed) return;
             session.NavigationPending = true;
             try
             {
@@ -170,7 +170,7 @@ namespace SheetPilot.Excel
                         if (session.Pane.Visible && !sessions.ContainsKey(ExcelDnaUtil.WindowHandle))
                         { Show(); sessions[ExcelDnaUtil.WindowHandle].Model.Query = session.Model.Query; }
                         Refresh();
-                        WorksheetFocus.Restore(ExcelDnaUtil.WindowHandle);
+                        session.View.Dispatcher.BeginInvoke(new Action(()=>session.View.FocusSelected()),System.Windows.Threading.DispatcherPriority.Input);
                     }
                     catch (Exception ex) { Log.Error("Navigate", ex); session.Model.Report(ex is InvalidOperationException ? ex.Message : "Excel 暂时无法跳转，请结束编辑后重试。"); }
                 });
@@ -179,7 +179,7 @@ namespace SheetPilot.Excel
         }
         private void Edit(PaneSession session,SheetEdit request)
         {
-            if(disposed||session.NavigationPending)return;
+            if(disposed)return;
             session.NavigationPending=true;
             ExcelAsyncUtil.QueueAsMacro(()=>
             {

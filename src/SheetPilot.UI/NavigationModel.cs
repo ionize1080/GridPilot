@@ -20,11 +20,13 @@ namespace SheetPilot.UI
         private long revision;
         private bool disposed;
         private bool searchPending;
+        private bool userSearchPending;
         private string query = "", message = "", status = "准备就绪";
         private bool settingsOpen;
         private bool settingsSaveFailed;
         private string settingsStatus = "设置更改后自动保存到 XLL 同目录。";
         public NavigationSettings Settings { get; }
+        public bool IsEditing { get; set; }
         private IReadOnlyList<SheetItem> results = new SheetItem[0];
         private SheetItem selected;
         public NavigationModel(NavigationSettings settings = null)
@@ -75,7 +77,7 @@ namespace SheetPilot.UI
         public string EmptyHint => snapshot.Sheets.Count == 0 ? "打开工作簿后，页面将显示在这里。" : "试试更短的关键词，或切换搜索范围。";
         public void Update(WorkbookSnapshot value)
         {
-            if (disposed || snapshot.SameContent(value)) return;
+            if (disposed || IsEditing || snapshot.SameContent(value)) return;
             bool activityOnly = !searchPending && snapshot.Sheets.Count == value.Sheets.Count &&
                 snapshot.Sheets.Zip(value.Sheets, (a,b) => a.Key == b.Key && a.WorkbookKey == b.WorkbookKey && a.Name == b.Name &&
                     a.WorkbookName == b.WorkbookName && a.Index == b.Index && a.Visibility == b.Visibility && a.Kind == b.Kind).All(equal => equal);
@@ -88,13 +90,18 @@ namespace SheetPilot.UI
                 Selected = Results.FirstOrDefault(s => s.IsActive);
                 return;
             }
-            ScheduleSearch();
+            ScheduleSearch(true);
         }
         public void Report(string value) { Message = value; Notify(nameof(EmptyTitle)); }
         public void Refresh() => RefreshRequested?.Invoke();
         public void Navigate(SheetItem item)
         {
-            if (item == null || disposed || searchPending) return;
+            if (item == null || disposed || (searchPending&&userSearchPending)) return;
+            // A rename refresh can be queued between mouse-down and mouse-up.
+            // Resolve the clicked identity against the current snapshot rather than
+            // discarding this valid navigation while its display list is rebuilding.
+            item = snapshot.Sheets.FirstOrDefault(s=>s.Key==item.Key&&s.WorkbookKey==item.WorkbookKey);
+            if(item==null)return;
             if (!item.CanNavigate) { Report("此页已隐藏。请先在 Excel 中取消隐藏，再跳转。"); return; }
             Message = "";
             NavigateRequested?.Invoke(item);
@@ -107,10 +114,11 @@ namespace SheetPilot.UI
             Notify(nameof(WorkbookName));
             ScheduleSearch();
         }
-        private void ScheduleSearch()
+        private void ScheduleSearch(bool contentRefresh=false)
         {
             if (disposed) return;
             revision++;
+            if(!contentRefresh)userSearchPending=true;
             searchPending = true;
             Status = "正在搜索…";
             pending?.Cancel();
@@ -130,6 +138,7 @@ namespace SheetPilot.UI
                 var output = await Task.Run(() => search.Filter(input.Sheets, options, source.Token));
                 if (disposed || source.IsCancellationRequested || version != revision) return;
                 searchPending = false;
+                userSearchPending = false;
                 var old = Selected;
                 Results = output.Items;
                 Selected = Results.FirstOrDefault(x => x.IsActive) ?? Results.FirstOrDefault(x => old != null && x.Key == old.Key && x.WorkbookKey == old.WorkbookKey) ?? Results.FirstOrDefault();

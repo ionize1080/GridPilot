@@ -3,7 +3,8 @@
  <ItemGroup>
   <ProjectReference Include="../../src/SheetPilot.Core/SheetPilot.Core.csproj"/>
   <ProjectReference Include="../../src/SheetPilot.UI/SheetPilot.UI.csproj"/>
-  <Compile Include="../../src/SheetPilot.Excel/SortOperations.cs" Link="SortOperations.cs"/>
+  <Compile Include="../../src/SheetPilot.Excel/AdvancedSortOperations.cs" Link="AdvancedSortOperations.cs" />
+    <Compile Include="../../src/SheetPilot.Excel/SortOperations.cs" Link="SortOperations.cs"/>
   <Compile Include="../../src/SheetPilot.Excel/ReportReader.cs" Link="ReportReader.cs"/><Compile Include="../../src/SheetPilot.Excel/NavigationEditing.cs" Link="NavigationEditing.cs"/>
   <Compile Include="../../src/SheetPilot.Excel/ExcelGateway.cs" Link="ExcelGateway.cs"/>
   <Compile Include="../../src/SheetPilot.Excel/WorkbookOperations.cs" Link="WorkbookOperations.cs"/>

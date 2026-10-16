@@ -3,9 +3,9 @@ from pathlib import Path
 import gzip, hashlib, html.parser, json, shutil, zipfile
 
 ROOT = Path(__file__).resolve().parent
-VERSION = '1.5.1'
+VERSION = '1.6.0'
 OUT = ROOT / ('release-v' + VERSION)
-DOCS = ['README.txt', 'RELEASE-v1.5.1.md', 'COMPATIBILITY.txt', 'COPYING.txt', 'MASKING.txt', 'SEGMENTATION.txt', 'VALIDATION.txt', 'SETTINGS.txt', 'DATABASE.txt', 'SIMPLE-MASKING.txt','RECONCILIATION.txt','SORTING.txt', 'UNICODE-LICENSE.txt', 'Check-Environment.ps1', 'EXCEL-DNA-LICENSE.txt', 'JIEBA-NET-LICENSE.txt', 'JIEBA-LICENSE.txt', 'NEWTONSOFT-JSON-LICENSE.txt', 'THIRD-PARTY-NOTICES.txt']
+DOCS = ['README.md', 'Check-Environment.ps1'] + [p.relative_to(ROOT).as_posix() for p in sorted((ROOT/'docs').rglob('*')) if p.is_file() and p.suffix.lower() in ('.md','.txt','.png')]
 
 class Text(html.parser.HTMLParser):
     def __init__(self):
@@ -37,7 +37,7 @@ def package():
         base = OUT / ('GridPilot-' + VERSION + '-' + suffix)
         # Never silently package stale output from an earlier attempt.
         if base.exists():
-            assert base.resolve().parent == OUT.resolve() and base.name.startswith('GridPilot-1.5.1-')
+            assert base.resolve().parent == OUT.resolve() and base.name.startswith('GridPilot-' + VERSION + '-')
             shutil.rmtree(base)
         base.mkdir()
         for file in (ROOT / 'dist').iterdir():
@@ -49,7 +49,9 @@ def package():
             for name in ('LICENSE', 'LICENSES.chromium.html', 'version'):
                 (base / 'Browser' / name).unlink(missing_ok=True)
         else:
-            for name in DOCS: shutil.copy2(ROOT / name, base / name)
+            for name in DOCS:
+                (base / name).parent.mkdir(parents=True,exist_ok=True)
+                shutil.copy2(ROOT / name, base / name)
             (base / 'SHA256SUMS.txt').write_text(''.join(digest(p) + '  ' + p.relative_to(base).as_posix() + '\n' for p in sorted(base.rglob('*')) if p.is_file()), encoding='ascii')
         archive = OUT / ('GridPilot-' + VERSION + '-' + suffix + '-win-x64.zip')
         with zipfile.ZipFile(archive, 'w', zipfile.ZIP_DEFLATED, compresslevel=6) as z:

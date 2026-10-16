@@ -118,7 +118,7 @@ namespace SheetPilot.Excel
             var menus=new XElement(ns+"contextMenus");
             foreach(string id in new[]{"ContextMenuCell","ContextMenuListRange"})
                 menus.Add(new XElement(ns+"contextMenu",new XAttribute("idMso",id),
-                    new XElement(ns+"button",new XAttribute("id","GridPilot_Sort_"+id),new XAttribute("label","GridPilot · 自定义排序…"),new XAttribute("getVisible","GetSortMenuVisible"),new XAttribute("getImage","GetImage"),new XAttribute("onAction","OnContextSort"))));
+                    new XElement(ns+"button",new XAttribute("id","GridPilot_Sort_"+id),new XAttribute("label","GridPilot · 多级排序…"),new XAttribute("getVisible","GetSortMenuVisible"),new XAttribute("getImage","GetImage"),new XAttribute("onAction","OnContextSort"))));
             return new XElement(ns + "customUI", new XAttribute("loadImage", "LoadImage"), new XAttribute("onLoad", "OnLoad"), new XElement(ns + "ribbon", new XElement(ns + "tabs", tab)),menus).ToString();
         }
         public void OnCommand(IRibbonControl control) => AddIn.Guard(() => { if(AddIn.Tools?.IsFeatureEnabled(control.Id)==true)AddIn.Features?.Execute(control.Id); });

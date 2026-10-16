@@ -1,4 +1,4 @@
-GridPilot 1.5.1 portable
+GridPilot 1.6.0 portable
 
 1. Fully extract the ZIP on 64-bit Windows 10/11. No installer and no WebView2 dependency.
 2. Choose GridPilot-x86.xll for 32-bit Excel, or GridPilot-x64.xll for 64-bit Excel.
@@ -23,5 +23,5 @@ preserved, including merged cells. Conditional formatting rules, shapes, notes, 
 external links, names and connections are not copied.
 
 Tested here: Windows 11 + Excel 16 x64. Target Windows 10 21H1 + Excel 2010 has NOT been
-verified on a real machine. See RELEASE-v1.5.1.md and VALIDATION.txt for exact coverage.
+verified on a real machine. See ../releases/RELEASE-v1.6.0.md and ../v1.6/VALIDATION.md for exact coverage.
 Portable does not bypass Office trust policies or enterprise execution restrictions.

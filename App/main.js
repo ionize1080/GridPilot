@@ -29,12 +29,13 @@ const reconciliation=new ReconcileManager(hostRequest,p=>win?.webContents.send('
 const file=pathToFileURL(path.join(__dirname,'index.html')).href;
 ipcMain.handle('request',async(event,message)=>{
   if(event.sender!==win?.webContents || event.senderFrame.url!==file)throw new Error('Invalid sender');
-  if(!message || !['init','preview','export','cancel','saveSettings','navigationSettings','previewPage','copyMask','dbList','dbChoose','dbSample','dbCreate','dbInfo','dbScan','dbQuery','dbOpenSource','legal','simpleCapture','simplePreview','simplePage','simpleCopy','simpleExport','simpleApply','simpleRecovery','reconcileChoose','reconcileSuggest','reconcileSample','reconcileLoad','reconcileSave','reconcileRun','reconcileOpenSource','reconcileExport'].includes(message.action))throw new Error('Invalid action');
+  if(!message || !['sortCapture','sortSample','sortPreview','sortPage','sortApply','sortUndo','sortNative','init','preview','export','cancel','saveSettings','navigationSettings','previewPage','copyMask','dbList','dbChoose','dbSample','dbCreate','dbInfo','dbScan','dbQuery','dbOpenSource','legal','simpleCapture','simplePreview','simplePage','simpleCopy','simpleExport','simpleApply','simpleRecovery','reconcileChoose','reconcileSuggest','reconcileSample','reconcileLoad','reconcileSave','reconcileRun','reconcileOpenSource','reconcileExport'].includes(message.action))throw new Error('Invalid action');
   if(JSON.stringify(message).length>32*1024*1024)throw new Error('请求过大');
   if(message.action==='legal'){const file=path.join(__dirname,'legal.bin');if(!fs.existsSync(file))return {titles:[],text:'许可信息将在正式发布包中提供。',offset:0,length:0};const entries=JSON.parse(require('node:zlib').gunzipSync(fs.readFileSync(file)));const selected=entries[Math.max(0,Math.min(entries.length-1,Number(message.index)||0))];let offset=Math.max(0,Number(message.offset)||0);if(message.search)offset=Math.max(0,selected.text.toLowerCase().indexOf(String(message.search).toLowerCase(),offset));return {titles:entries.map(e=>e.title),text:selected.text.slice(offset,offset+40000),offset,length:selected.text.length};}
   if(message.action.startsWith('reconcile'))return reconciliation.handle(message,dialog,win);
   if(message.action.startsWith('db'))return databases.handle(message,dialog,win);
   if(message.action==='cancel'){databases.cancel();reconciliation.cancel();}
+  if(message.action==='sortNative'){win.hide();try{return await hostRequest(message);}finally{if(!win.isDestroyed()){win.show();win.focus();}}}
   if((message.action==='copyMask'||message.action==='simpleCopy')){const result=await hostRequest(message);await clipboard.write([new ClipboardItem({'text/plain':result.text,'text/html':result.html})]);return {copied:true,message:`已复制 ${result.rows} 行 × ${result.columns} 列脱敏结果。`};}
   if(message.action==='simpleExport'||message.action==='simpleRecovery'){
     const recovery=message.action==='simpleRecovery';

@@ -16,7 +16,7 @@ using SheetPilot.UI;
 
 namespace SheetPilot.Excel
 {
-    public sealed class ToolsModule : IFeatureModule
+    public sealed partial class ToolsModule : IFeatureModule
     {
         private readonly ExcelGateway gateway;
         private readonly NavigationModule navigation;
@@ -46,7 +46,7 @@ namespace SheetPilot.Excel
         public bool CanUndo => gateway.CanUndo;
         internal string PerformanceSummary => focus?.PerformanceSummary ?? "Focus not started";
         public IEnumerable<FeatureCommand> Commands => new[] {
-            new FeatureCommand("GridPilot_Sort", "自定义排序", "中文数字、自定义序列和正则组合；预览后按整条记录排序。", "", () => Run(OpenSort)),
+            new FeatureCommand("GridPilot_Sort", "多级排序", "最多 20 级；原生数值、中文序列、正则组合和全量分页预览。", "", () => Run(OpenSort)),
             new FeatureCommand("GridPilot_Reconcile", "监管核对", "两期余额、发放回收、专项关联、差额追溯与变动报告。", "", () => Run(()=>OpenDatabase(true))),
             new FeatureCommand("GridPilot_Database", "报表数据库", "文件夹报表归档、快照与累计去重、可视化和 SQL 查询；在源 Excel 修改后扫描更新。", "", () => Run(()=>OpenDatabase())),
             new FeatureCommand("GridPilot_SimpleMask", "简易脱敏", "选区拼音首字母、固定字符映射、首尾交换、正则和数字运算；预览后复制、导出或写回原表。", "", () => Run(OpenSimpleMask)),
@@ -74,21 +74,6 @@ namespace SheetPilot.Excel
         }
         [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern short GetAsyncKeyState(int key);
         public void Execute(string id) { if(!settings.IsEnabled(id))return; foreach (var command in Commands) if (command.Id == id) { command.Execute(); return; } }
-        private void OpenSort()
-        {
-            var snapshot=gateway.CaptureSort();Func<string> restore=null;
-            Show(new SortWindow(navigation.Settings,settings.Sort,snapshot.Description,snapshot.Headers,snapshot.InitialColumn,
-                (column,header)=>snapshot.Keys(column,header),
-                (column,options)=>{var prior=gateway.UndoOperation;var result=gateway.ApplySort(snapshot,column,options);restore=ReferenceEquals(prior,gateway.UndoOperation)?null:gateway.CaptureUndoAction();settings.Sort=options.Clone();store.Save(settings);Ribbon.Refresh();return result;},false,()=>{var text=restore==null?"本次没有改变顺序。":restore();Ribbon.Refresh();return text;}));
-        }
-        internal void OpenSheetSort(SheetItem source, bool? descending=null)
-        {
-            Func<string> restore=null;var snapshot=gateway.Capture(true);var sheets=snapshot.Sheets.Where(s=>s.WorkbookKey==source.WorkbookKey).ToArray();
-            var options=settings.Sort.Clone();if(descending.HasValue){options.Natural=true;options.Descending=descending.Value;}
-            Show(new SortWindow(navigation.Settings,options,source.WorkbookName+" · 全部 "+sheets.Length+" 个标签（包含隐藏页与图表页）",new string[0],0,
-                (column,header)=>sheets.Select(s=>s.Name).ToArray(),
-                (column,sort)=>{var result=gateway.SortSheets(sheets,sort);restore=gateway.CaptureUndoAction();settings.Sort=sort.Clone();store.Save(settings);navigation.Refresh();Ribbon.Refresh();return result;},true,()=>{var text=restore==null?"本次没有改变顺序。":restore();navigation.Refresh();Ribbon.Refresh();return text;}));
-        }
         private void OpenRename()
         {
             var working = new ToolPreferences { Rename = settings.Rename.Clone() };

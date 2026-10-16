@@ -10,11 +10,12 @@ namespace SheetPilot.UI
         public NavigationView(NavigationModel model)
         {
             InitializeComponent(); DataContext = model; ViewTheme.Apply(Resources, model.Settings);
-            model.Settings.PropertyChanged += SettingsChanged;
+            model.Settings.PropertyChanged += SettingsChanged;UpdateQuickSort();
         }
         private void SettingsChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
         {
             if (e.PropertyName.EndsWith("Color", System.StringComparison.Ordinal)) ViewTheme.Apply(Resources, Model.Settings);
+            if(e.PropertyName.StartsWith("QuickSort",System.StringComparison.Ordinal))UpdateQuickSort();
         }
         public void Dispose()
         {
@@ -25,6 +26,7 @@ namespace SheetPilot.UI
         private void OnToolTipOpening(object sender, ToolTipEventArgs e) { if (!Model.Settings.ShowTooltips) e.Handled = true; }
         private NavigationModel Model => (NavigationModel)DataContext;
         public void FocusSearch() { SearchBox.Focus(); SearchBox.SelectAll(); }
+        public void FocusSelected(){if(editing!=null||Model.Selected==null)return;var row=SheetList.ItemContainerGenerator.ContainerFromItem(Model.Selected) as ListBoxItem;row?.Focus();}
         private void RefreshClick(object sender, RoutedEventArgs e) => Model.Refresh();
         private void SettingsClick(object sender, RoutedEventArgs e) => Model.IsSettingsOpen = true;
         private void BackClick(object sender, RoutedEventArgs e) { Model.IsSettingsOpen = false; FocusSearch(); }
@@ -64,27 +66,35 @@ namespace SheetPilot.UI
             EndRename(false);SheetList.ScrollIntoView(item);SheetList.UpdateLayout();
             var row=SheetList.ItemContainerGenerator.ContainerFromItem(item) as ListBoxItem;if(row==null)return;
             editing=Child<TextBox>(row,"InlineName");editingLabel=Child<TextBlock>(row,"SheetNameLabel");if(editing==null||editingLabel==null)return;
-            editingItem=item;editing.Text=item.Name;editingLabel.Visibility=Visibility.Collapsed;editing.Visibility=Visibility.Visible;editing.Focus();editing.SelectAll();dragItem=null;
+            editingItem=item;Model.IsEditing=true;editing.Text=item.Name;editingLabel.Visibility=Visibility.Collapsed;editing.Visibility=Visibility.Visible;editing.Focus();editing.SelectAll();dragItem=null;
         }
         private void EndRename(bool commit)
         {
             if(editing==null)return;
             string text=editing.Text;var item=editingItem;
             if(commit){string error=RenamePlanner.ValidateName(text);if(error!=null){Model.Report(error);return;}}
-            var box=editing;editing=null;editingItem=null;editingLabel.Visibility=Visibility.Visible;box.Visibility=Visibility.Collapsed;
+            var box=editing;editing=null;editingItem=null;Model.IsEditing=false;editingLabel.Visibility=Visibility.Visible;box.Visibility=Visibility.Collapsed;
             if(commit&&text!=item.Name)Model.Edit(new SheetEdit{Source=item,Action="rename",Name=text});
         }
         private void InlineKey(object sender,KeyEventArgs e){if(e.Key==Key.Enter||e.Key==Key.Escape){EndRename(e.Key==Key.Enter);e.Handled=true;}}
         private void InlineBlur(object sender,KeyboardFocusChangedEventArgs e){EndRename(true);}
-        private void SortClick(object sender,RoutedEventArgs e)
+        private void UpdateQuickSort()
         {
-            var item=Model.Selected;if(item==null){Model.Report("请先选择一个工作表。");return;}
-            var menu=new ContextMenu();
-            foreach(var pair in new[]{new[]{"名称升序…","sortAsc"},new[]{"名称降序…","sortDesc"},new[]{"自定义序列 / 正则组合…","sort"}})
-            {var entry=new MenuItem{Header=pair[0]};string action=pair[1];entry.Click+=(s,a)=>Model.Edit(new SheetEdit{Source=item,Action=action});menu.Items.Add(entry);}
-            menu.PlacementTarget=(Button)sender;menu.IsOpen=true;
+            if(QuickSortButton==null)return;
+            QuickSortButton.Content=Model.Settings.QuickSortDescending?"↓":"↑";
+            QuickSortButton.ToolTip=(Model.Settings.QuickSortDescending?"一键降序":"一键升序")+" · "+new[]{"名称 A–Z","自然数字顺序","最近使用的自定义规则"}[Model.Settings.QuickSortMode]+"（同一工作簿的全部标签）";
         }
-        private void DragStart(object sender,MouseButtonEventArgs e){dragOrigin=e.GetPosition(SheetList);dragItem=RowAt(e.OriginalSource)?.DataContext as SheetItem;}
+        private void QuickSortClick(object sender,RoutedEventArgs e)
+        {EndRename(true);var item=Model.Selected;if(item==null)return;Model.Edit(new SheetEdit{Source=item,Action=Model.Settings.QuickSortDescending?"sortDesc":"sortAsc"});Model.Settings.QuickSortDescending=!Model.Settings.QuickSortDescending;}
+        private void SortClick(object sender,RoutedEventArgs e)
+        {EndRename(true);var item=Model.Selected;if(item==null){Model.Report("请先选择一个工作表。");return;}Model.Edit(new SheetEdit{Source=item,Action="sort"});}
+        private void DragStart(object sender,MouseButtonEventArgs e)
+        {
+            dragOrigin=e.GetPosition(SheetList);dragItem=RowAt(e.OriginalSource)?.DataContext as SheetItem;
+            if(editing!=null&&dragItem!=null&&dragItem.Key!=editingItem.Key)
+            {EndRename(true);if(editing!=null){e.Handled=true;return;}}
+            if(e.ClickCount==2&&editing==null&&dragItem!=null){var item=dragItem;Model.Selected=item;Rename(item);e.Handled=true;}
+        }
         private void DragMove(object sender,MouseEventArgs e)
         {
             if(editing!=null||dragItem==null||e.LeftButton!=MouseButtonState.Pressed||dragging)return;
@@ -115,7 +125,10 @@ namespace SheetPilot.UI
                 return;
             }
             if(e.Key==Key.F2&&SheetList.IsKeyboardFocusWithin&&Model.Selected!=null){Rename(Model.Selected);e.Handled=true;return;}
-            if((Keyboard.Modifiers&ModifierKeys.Alt)!=0&&(e.Key==Key.Up||e.Key==Key.Down)&&Model.Selected!=null){Model.Edit(new SheetEdit{Source=Model.Selected,Action=e.Key==Key.Up?"up":"down"});e.Handled=true;return;}
+            if(e.Key==Key.Space&&SheetList.IsKeyboardFocusWithin){Model.Navigate(Model.Selected);e.Handled=true;return;}
+            if(e.Key==Key.Insert&&Keyboard.Modifiers==ModifierKeys.None&&SheetList.IsKeyboardFocusWithin&&Model.Selected!=null){Model.Edit(new SheetEdit{Source=Model.Selected,Action="add"});e.Handled=true;return;}
+            var key=e.Key==Key.System?e.SystemKey:e.Key;
+            if((Keyboard.Modifiers&ModifierKeys.Alt)!=0&&(key==Key.Up||key==Key.Down)&&SheetList.IsKeyboardFocusWithin&&Model.Selected!=null){Model.Edit(new SheetEdit{Source=Model.Selected,Action=key==Key.Up?"up":"down"});e.Handled=true;return;}
             if (e.Key == Key.F && (Keyboard.Modifiers & ModifierKeys.Control) != 0) { FocusSearch(); e.Handled = true; }
             else if (e.Key == Key.F5) { Model.Refresh(); e.Handled = true; }
             else if (e.Key == Key.Escape) { Model.Query = ""; e.Handled = true; }

@@ -22,6 +22,8 @@ internal static partial class Program
     {
         try
         {
+            if(args.Length>0&&args[0]=="--multi-sort"){MultiSortTests(args.Contains("--excel"),args.Length>2?args[2]:null);Console.WriteLine("PASS "+checks+" assertions");return 0;}
+            if(args.Length>2&&args[0]=="--multi-ui"){MultiSortUiLaunch(args[1],args[2],args.Length>3?args[3]:null);return 0;}
             if(args.Length==0 && Path.GetFileNameWithoutExtension(System.Reflection.Assembly.GetExecutingAssembly().Location).Contains("Compatibility")) return CompatibilityRunner();
             if(args.Length>0&&args[0]=="--reconcile-json"){Console.OutputEncoding=new System.Text.UTF8Encoding(false);Console.WriteLine(Newtonsoft.Json.JsonConvert.SerializeObject(ReportReader.Read(args[1],args.Length>2?args[2]:null,0,CancellationToken.None,true)));return 0;}
             if(args.Length>0&&args[0]=="--report-json"){Console.OutputEncoding=new System.Text.UTF8Encoding(false);Console.WriteLine(Newtonsoft.Json.JsonConvert.SerializeObject(ReportReader.Read(args[1],args.Length>2?args[2]:null,0,CancellationToken.None)));return 0;}
@@ -244,6 +246,10 @@ internal static partial class Program
             int navigated = 0; model.NavigateRequested += s => navigated++;
             model.Navigate(rows[5]); Check(navigated == 0 && model.HasMessage, "hidden navigation blocked");
             model.Navigate(rows[1]); Check(navigated == 1, "visible navigation requested");
+            var renamed=(SheetItem[])rows.Clone();renamed[1]=new SheetItem("2","改名后的页面",2,SheetVisibility.Visible,false,"工作表","demo","2026 年度经营分析.xlsx");
+            model.Update(new WorkbookSnapshot("demo","2026 年度经营分析.xlsx",renamed));
+            model.Navigate(rows[0]);Check(navigated==2,"rename refresh does not discard the next navigation click");
+            model.Update(new WorkbookSnapshot("demo","2026 年度经营分析.xlsx",rows));PumpUntil(()=>model.Status.Contains(" / "));
             var view = new NavigationView(model);
             Check(!model.ShowWorkbookNames && model.EffectiveRowHeight == 36, "UI: current scope omits redundant workbook subtitle");
             model.Settings.WorkbookNameMode = 1;
@@ -277,7 +283,7 @@ internal static partial class Program
                 model.Update(new WorkbookSnapshot("demo", "2026 年度经营分析.xlsx", rows)); PumpUntil(() => model.Results.Count == 7);
             }
             model.Query = "销售";
-            model.Navigate(rows[0]); Check(navigated == 1, "pending search cannot navigate stale results");
+            model.Navigate(rows[0]); Check(navigated == 2, "pending search cannot navigate stale results");
             model.Query = "趋势";
             PumpUntil(() => model.Results.Count == 1 && model.Results[0].Name == "月度趋势");
             Check(model.Results[0].Name == "月度趋势", "latest search wins");

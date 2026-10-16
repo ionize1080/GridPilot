@@ -66,6 +66,10 @@ namespace SheetPilot.Core
         [DataMember] public bool UseRegex { get => useRegex; set => Set(ref useRegex, value); }
         private bool matchCase = false;
         [DataMember] public bool MatchCase { get => matchCase; set => Set(ref matchCase, value); }
+        private int quickSortMode;
+        [DataMember] public int QuickSortMode { get => quickSortMode; set => Set(ref quickSortMode, Range(value,0,2)); }
+        private bool quickSortDescending;
+        [DataMember] public bool QuickSortDescending { get => quickSortDescending; set => Set(ref quickSortDescending,value); }
         [OnDeserializing] private void Initialize(StreamingContext context) { Reset(); }
         public void Reset()
         {
@@ -89,6 +93,8 @@ namespace SheetPilot.Core
             IncludeHidden = true;
             UseRegex = false;
             MatchCase = false;
+            QuickSortMode = 0;
+            QuickSortDescending = false;
         }
         private static int Range(int value, int min, int max) => Math.Max(min, Math.Min(max, value));
         private void Set<T>(ref T field, T value, [CallerMemberName] string name = null)
