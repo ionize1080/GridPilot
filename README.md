@@ -1,8 +1,8 @@
 # GridPilot
 
-Windows 桌面 Excel 的便携工具集。当前版本 **1.6.0**。
+Windows 桌面 Excel 的便携工具集。当前版本 **1.6.1**。
 
-[下载完整便携包](https://github.com/ionize1080/GridPilot/releases/tag/v1.6.0) · [更新说明](docs/releases/RELEASE-v1.6.0.md) · [验证记录](docs/v1.6/VALIDATION.md) · [数据库设计](docs/v1.1/DESIGN.md)
+[下载完整便携包](https://github.com/ionize1080/GridPilot/releases/tag/v1.6.1) · [更新说明](docs/releases/RELEASE-v1.6.1.md) · [验证记录](docs/v1.6/VALIDATION.md) · [数据库设计](docs/v1.1/DESIGN.md)
 
 排序、脱敏与总设置采用独立 Chromium 窗口，免安装、离线运行、按需启动。导航保留轻量原生任务面板。XLL、业务 DLL、词典和浏览器已拆分，**必须完整解压，不能单独复制 XLL**。
 
@@ -13,6 +13,15 @@ Windows 桌面 Excel 的便携工具集。当前版本 **1.6.0**。
 3. 升级时退出 Excel，保留 `GridPilot.navigation.json` 和 `GridPilot.tools.json`。新旧版本不要同时加载。
 
 本机验证环境是 Windows 11 + Excel 16 x64。**Win10 21H1 + Excel 2010、32 位 Excel 尚未实机验收**。构建基线与兼容路径保留，但不能把新版 Excel 的测试结果视为旧版验收。
+
+## v1.6.1 导航菜单与重命名修复
+
+- 导航右键采用 Windows 原生菜单，首次使用无需先打开高级排序窗口。
+- 双击/F2 改名后，点击列表空白、窗格背景或其他条目均提交；Enter 提交，Esc 取消。
+- 编辑框右键保留名称和选区，提供撤销、剪切、复制、粘贴、删除、全选；支持 Ctrl+V。
+- 菜单打开和编辑期间暂缓目录刷新，避免干扰焦点及条目。
+
+[本次修复与验证](docs/releases/RELEASE-v1.6.1.md)。
 
 ## v1.6 多级联动排序与紧凑导航
 

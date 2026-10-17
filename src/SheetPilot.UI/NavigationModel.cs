@@ -27,6 +27,7 @@ namespace SheetPilot.UI
         private string settingsStatus = "设置更改后自动保存到 XLL 同目录。";
         public NavigationSettings Settings { get; }
         public bool IsEditing { get; set; }
+        public bool IsMenuOpen { get; set; }
         private IReadOnlyList<SheetItem> results = new SheetItem[0];
         private SheetItem selected;
         public NavigationModel(NavigationSettings settings = null)
@@ -77,7 +78,7 @@ namespace SheetPilot.UI
         public string EmptyHint => snapshot.Sheets.Count == 0 ? "打开工作簿后，页面将显示在这里。" : "试试更短的关键词，或切换搜索范围。";
         public void Update(WorkbookSnapshot value)
         {
-            if (disposed || IsEditing || snapshot.SameContent(value)) return;
+            if (disposed || IsEditing || IsMenuOpen || snapshot.SameContent(value)) return;
             bool activityOnly = !searchPending && snapshot.Sheets.Count == value.Sheets.Count &&
                 snapshot.Sheets.Zip(value.Sheets, (a,b) => a.Key == b.Key && a.WorkbookKey == b.WorkbookKey && a.Name == b.Name &&
                     a.WorkbookName == b.WorkbookName && a.Index == b.Index && a.Visibility == b.Visibility && a.Kind == b.Kind).All(equal => equal);

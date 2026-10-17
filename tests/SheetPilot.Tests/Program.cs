@@ -22,6 +22,7 @@ internal static partial class Program
     {
         try
         {
+            if(args.Length>0&&args[0]=="--navigation-host"){NavigationInteractionTests();return 0;}
             if(args.Length>0&&args[0]=="--multi-sort"){MultiSortTests(args.Contains("--excel"),args.Length>2?args[2]:null);Console.WriteLine("PASS "+checks+" assertions");return 0;}
             if(args.Length>2&&args[0]=="--multi-ui"){MultiSortUiLaunch(args[1],args[2],args.Length>3?args[3]:null);return 0;}
             if(args.Length==0 && Path.GetFileNameWithoutExtension(System.Reflection.Assembly.GetExecutingAssembly().Location).Contains("Compatibility")) return CompatibilityRunner();

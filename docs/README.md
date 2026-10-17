@@ -4,6 +4,7 @@
 - [复制](guides/COPYING.txt)、[简易脱敏](guides/SIMPLE-MASKING.txt)、[数据库](guides/DATABASE.txt)、[监管核对](guides/RECONCILIATION.txt)
 - [架构](development/ARCHITECTURE.txt)、[构建](development/BUILD.txt)
 - [v1.6 验证记录](v1.6/VALIDATION.md)、[历史验证](validation/VALIDATION.txt)
+- [v1.6.1 导航修复与验证](releases/RELEASE-v1.6.1.md)
 - [v1.6 更新说明](releases/RELEASE-v1.6.0.md)，历史更新位于 `releases/`
 - 第三方许可原文位于 `licenses/`，清洁便携包中可从“设置 → 关于与许可”阅读。
 

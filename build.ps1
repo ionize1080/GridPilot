@@ -16,7 +16,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Cold native-host color picker tests failed.' }
     & '.\tests\SheetPilot.Tests\bin\Release\net462\SheetPilot.Tests.exe' --release-features
     if ($LASTEXITCODE -ne 0) { throw 'Release feature tests failed.' }
-    foreach($suite in @('--upgrade','--v1','--v11','--multi-sort')) {
+    foreach($suite in @('--navigation-host','--upgrade','--v1','--v11','--multi-sort')) {
         & '.\tests\SheetPilot.Tests\bin\Release\net462\SheetPilot.Tests.exe' $suite
         if ($LASTEXITCODE -ne 0) { throw "Regression tests failed: $suite" }
     }

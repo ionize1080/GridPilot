@@ -142,7 +142,7 @@ namespace SheetPilot.Excel
                     {
                         foreach (var dead in sessions.Keys.Where(h => !IsWindow(h)).ToArray()) { sessions[dead].Dispose(); sessions.Remove(dead); }
                         WorkbookSnapshot snapshot = null;
-                        foreach (var session in sessions.Values.Where(p => p.Pane.Visible && !p.IsResizing))
+                        foreach (var session in sessions.Values.Where(p => p.Pane.Visible && !p.IsResizing && !p.Model.IsEditing && !p.Model.IsMenuOpen))
                         {
                             if (snapshot == null) snapshot = gateway.Capture(settings.ScopeIndex == 1);
                             session.Model.Update(snapshot);
