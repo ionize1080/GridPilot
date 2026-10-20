@@ -46,6 +46,7 @@ namespace SheetPilot.Excel
         public bool CanUndo => gateway.CanUndo;
         internal string PerformanceSummary => focus?.PerformanceSummary ?? "Focus not started";
         public IEnumerable<FeatureCommand> Commands => new[] {
+            new FeatureCommand("GridPilot_AI", "AI 助手", "Chatbox 1.20.3：解释公式、生成并插入公式、查找与统计；选区 / 工作表 / 工作簿上下文。", "", () => Run(OpenAi)),
             new FeatureCommand("GridPilot_Sort", "多级排序", "最多 20 级；原生数值、中文序列、正则组合和全量分页预览。", "", () => Run(OpenSort)),
             new FeatureCommand("GridPilot_Reconcile", "监管核对", "两期余额、发放回收、专项关联、差额追溯与变动报告。", "", () => Run(()=>OpenDatabase(true))),
             new FeatureCommand("GridPilot_Database", "报表数据库", "文件夹报表归档、快照与累计去重、可视化和 SQL 查询；在源 Excel 修改后扫描更新。", "", () => Run(()=>OpenDatabase())),
@@ -237,6 +238,6 @@ namespace SheetPilot.Excel
             try { dynamic app = ExcelDnaUtil.Application; if (Equals((object)app.StatusBar, status)) app.StatusBar = previousStatus ?? false; } catch { }
             status = null;
         }
-        public void Dispose() { if (disposed) return; disposed = true;gateway.ReleaseUndoEvents(); focus?.Dispose(); foreach(var browser in portableWindows)browser.Dispose();portableWindows.Clear(); ClearStatus(); statusTimer.Dispose(); foreach (var window in new List<Window>(windows)) window.Close(); windows.Clear(); }
+        public void Dispose() { if (disposed) return; disposed = true;CloseAi();gateway.ReleaseUndoEvents(); focus?.Dispose(); foreach(var browser in portableWindows)browser.Dispose();portableWindows.Clear(); ClearStatus(); statusTimer.Dispose(); foreach (var window in new List<Window>(windows)) window.Close(); windows.Clear(); }
     }
 }

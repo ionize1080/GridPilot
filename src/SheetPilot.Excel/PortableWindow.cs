@@ -24,18 +24,19 @@ namespace SheetPilot.Excel
         private int lastProgressTick;
         private readonly SemaphoreSlim sending=new SemaphoreSlim(1,1);
         public bool IsDisconnected=>disposed || disconnected;
+        public void Activate() => Send(new { type = "activate" });
         public event Action Disconnected;
         private void Disconnect(){lock(gate){if(disconnected)return;disconnected=true;}Disconnected?.Invoke();CancelRequested?.Invoke();}
         public event Action Closed;
         public event Action CancelRequested;
-        public PortableWindow(string directory,Func<JObject,Task<object>> handler)
+        public PortableWindow(string directory,Func<JObject,Task<object>> handler,string appFolder="App")
         {
             handle=handler;string executable=Path.Combine(directory,"Browser","electron.exe");
             if(!File.Exists(executable))throw new InvalidOperationException("缺少便携界面组件。请完整解压发布包（包含 Browser 和 App 文件夹）。");
             string name="GridPilot-"+Guid.NewGuid().ToString("N");
             var acl=new PipeSecurity();acl.SetAccessRuleProtection(true,false);acl.AddAccessRule(new PipeAccessRule(WindowsIdentity.GetCurrent().User,PipeAccessRights.FullControl,AccessControlType.Allow));
             pipe=new NamedPipeServerStream(name,PipeDirection.InOut,1,PipeTransmissionMode.Byte,PipeOptions.Asynchronous,65536,65536,acl);
-            var start=new ProcessStartInfo(executable,"\""+Path.Combine(directory,"App")+"\" --gridpilot-pipe="+name) {UseShellExecute=false,CreateNoWindow=true,WorkingDirectory=directory};
+            var start=new ProcessStartInfo(executable,"\""+Path.Combine(directory,appFolder)+"\" --gridpilot-pipe="+name) {UseShellExecute=false,CreateNoWindow=true,WorkingDirectory=directory};
             start.EnvironmentVariables.Remove("ELECTRON_RUN_AS_NODE");start.EnvironmentVariables.Remove("NODE_OPTIONS");
             process=new Process {StartInfo=start,EnableRaisingEvents=true};
             process.Exited+=(s,e)=>{Disconnect();if(!disposed)ExcelAsyncUtil.QueueAsMacro(()=>{Closed?.Invoke();Dispose();});};

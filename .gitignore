@@ -9,4 +9,5 @@ SheetPilot.settings.json*
 GridPilot.navigation.json*
 GridPilot.tools.json*
 .temp/
+**/node_modules/
 release-v*/

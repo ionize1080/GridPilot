@@ -1,0 +1,9 @@
+Chatbox 1.20.3 / GridPilot integration
+Upstream: https://github.com/chatboxai/chatbox
+Pinned release: https://github.com/chatboxai/chatbox/releases/tag/v1.20.3
+Pinned source tag commit: d3cd0ad1e6a1127bbbf3991bb5296c181f4cbdeb
+Source archive: https://github.com/chatboxai/chatbox/archive/refs/tags/v1.20.3.tar.gz
+Copyright and licensing remain with the original authors. Chatbox is distributed under GPL-3.0; see Chatbox/LICENSE-GPL-3.0.txt. Native bundled dependency notices and source maps are preserved in Chatbox/native in both packages.
+This is a modified integration, not an official Chatbox release. GridPilot changes are in integrations/chatbox in the GridPilot source repository, with exact original/patched hashes recorded in Chatbox/provenance.json. The bootstrap reuses GridPilot's Electron runtime, isolates the profile, pins updates and adds an authenticated Excel MCP bridge. The native settings entry points remain available.
+Installer SHA-256: 874171c6c7358ff3915f01412eb036154a5ded7a76c4663fb0f592d2c5c23b13
+app.asar SHA-256: e43647af8168b731caa9afaed269a4700f8686c257fbc4dd6a254da42729fa01

@@ -35,6 +35,15 @@ async function test(mode) {
     const page = await application.firstWindow(); const errors = []; page.on('pageerror', e => errors.push(e.message));
     await page.getByRole('button', { name: mode === 'mask' ? '分析与预览' : '保存设置', exact: true }).waitFor();
     if (mode === 'settings') {
+      await page.getByRole('button',{name:'AI 助手',exact:true}).click();
+      assert.equal(await page.getByLabel('AI 助手工作方式').inputValue(),'0');
+      await page.getByLabel('AI 助手工作方式').selectOption('1');
+      await page.getByRole('button',{name:'保存设置',exact:true}).click();
+      await page.locator('#status').filter({hasText:'已保存'}).waitFor();
+      assert.equal(lastRequest.settings.AiDisplayMode,1);
+      fs.mkdirSync(path.join(root,'docs/v1.7'),{recursive:true});
+      await page.screenshot({path:path.join(root,'docs/v1.7/gridpilot-settings.png')});
+      console.log('PASS AI sidebar default and standalone preference save');
       await page.getByRole('button',{name:'功能开关',exact:true}).click();
       assert.equal(await page.locator('[id^="feature-"]').count(),12);
       const before=await page.locator('[id^="feature-"]').evaluateAll(xs=>xs.map(x=>x.id));

@@ -3,7 +3,7 @@ from pathlib import Path
 import gzip, hashlib, html.parser, json, shutil, zipfile
 
 ROOT = Path(__file__).resolve().parent
-VERSION = '1.6.1'
+VERSION = '1.7.0'
 OUT = ROOT / ('release-v' + VERSION)
 DOCS = ['README.md', 'Check-Environment.ps1'] + [p.relative_to(ROOT).as_posix() for p in sorted((ROOT/'docs').rglob('*')) if p.is_file() and p.suffix.lower() in ('.md','.txt','.png')]
 
@@ -42,7 +42,7 @@ def package():
         base.mkdir()
         for file in (ROOT / 'dist').iterdir():
             if file.is_file() and file.suffix in ('.dll', '.xll'): shutil.copy2(file, base / file.name)
-        for folder in ('App', 'Browser', 'Resources'):
+        for folder in ('App', 'Browser', 'Resources', 'Chatbox'):
             shutil.copytree(ROOT / 'dist' / folder, base / folder)
         if clean:
             # License texts remain bundled and readable in Settings > About. Dictionary .txt files are runtime data.
@@ -63,7 +63,9 @@ def package():
             assert any(n.endswith('/App/legal.bin') for n in names)
             assert any(n.endswith('/Browser/electron.exe') for n in names)
             assert len([n for n in names if n.endswith('.xll')]) == 2
-            if clean: assert not any(n.lower().endswith('.md') or 'license' in Path(n).name.lower() or 'notice' in Path(n).name.lower() for n in names)
+            # Chatbox's native third-party attribution remains in both packages.
+            assert any(n.endswith('/Chatbox/provenance.json') for n in names)
+            if clean: assert not any('/docs/' in n and '/Chatbox/' not in n for n in names)
         print(archive.name, archive.stat().st_size, digest(archive), flush=True)
     (OUT / 'SHA256SUMS.txt').write_text(''.join(digest(p) + '  ' + p.name + '\n' for p in sorted(OUT.glob('*.zip'))), encoding='ascii')
 

@@ -1,0 +1,46 @@
+const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto'),{execFileSync}=require('node:child_process');
+const asar=require('@electron/asar');
+const root=path.resolve(__dirname,'../..'),temp=path.join(root,'.temp');
+const installer=path.join(temp,'Chatbox-1.20.3-Setup.exe');
+const hash=file=>crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+const expected='874171c6c7358ff3915f01412eb036154a5ded7a76c4663fb0f592d2c5c23b13';
+if(hash(installer)!==expected)throw Error('Chatbox 1.20.3 official SHA-256 mismatch');
+const extracted=path.join(temp,'chatbox-official-installer');
+if(!fs.existsSync(path.join(extracted,'resources/app.asar'))){
+  execFileSync(require('7zip-bin').path7za,['x',installer,'-o'+extracted,'-y'],{stdio:'pipe',windowsHide:true});
+}
+const archive=path.join(extracted,'resources/app.asar');
+if(hash(archive)!=='e43647af8168b731caa9afaed269a4700f8686c257fbc4dd6a254da42729fa01')throw Error('Unexpected official app.asar');
+const out=path.join(temp,'Chatbox'),native=path.join(out,'native');
+fs.mkdirSync(native,{recursive:true});asar.extractAll(archive,native);
+const packageData=JSON.parse(fs.readFileSync(path.join(native,'package.json'),'utf8'));
+if(packageData.version!=='1.20.3')throw Error('Unexpected native version');
+fs.mkdirSync(path.join(out,'resources'),{recursive:true});
+fs.cpSync(path.join(extracted,'resources/assets'),path.join(out,'resources/assets'),{recursive:true});
+const patches=[];
+function patch(relative,before,after){
+  const file=path.join(native,relative),text=fs.readFileSync(file,'utf8');
+  if(text.split(before).length!==2)throw Error('Pinned binary patch anchor changed: '+relative);
+  fs.writeFileSync(file,text.replace(before,after));
+  patches.push({file:relative,originalSha256:crypto.createHash('sha256').update(text).digest('hex'),patchedSha256:hash(file),before,after});
+}
+patch('dist/main/main.js',
+  'await createWindow(),ensureTray(),new AppUpdater(()=>mainWindow?.webContents.send("update-downloaded",{}))',
+  'await createWindow(),void 0');
+patch('dist/renderer/js/InputBox.DH3jG147.js',
+  'constructedMessage:E.message,needGenerating:s,',
+  'constructedMessage:await window.gridpilotExcel.captureMessage(E.message),needGenerating:s,');
+patch('dist/renderer/js/index.TlLbGKvw.js',
+  'maxContextMessageCount:nu.maxContextMessageCount});const yu=[];',
+  'maxContextMessageCount:nu.maxContextMessageCount});ku=window.gridpilotExcel.expandMessages(ku);const yu=[];');
+const renderer=path.join(native,'dist/renderer/js/index.TlLbGKvw.js');
+const rendererBefore=hash(renderer);
+fs.appendFileSync(renderer,'\nwindow.addEventListener("gridpilot:sidebar",()=>uiStore.getState().setShowSidebar(false));\n');
+patches.push({file:'dist/renderer/js/index.TlLbGKvw.js',originalSha256:rendererBefore,patchedSha256:hash(renderer),append:'Collapse the native conversation drawer once when entering the Excel sidebar; its original toggle stays available.'});
+const preload=path.join(native,'dist/preload/index.js'),original=hash(preload);
+fs.appendFileSync(preload,'\n'+fs.readFileSync(path.join(__dirname,'preload.cjs'),'utf8'));
+patches.push({file:'dist/preload/index.js',originalSha256:original,patchedSha256:hash(preload),append:'integrations/chatbox/preload.cjs'});
+for(const name of ['bootstrap.cjs','tools.cjs','LICENSE-GPL-3.0.txt'])fs.copyFileSync(path.join(__dirname,name),path.join(out,name));
+fs.writeFileSync(path.join(out,'package.json'),JSON.stringify({name:'gridpilot-chatbox',version:'1.20.3',private:true,main:'bootstrap.cjs'}));
+fs.writeFileSync(path.join(out,'provenance.json'),JSON.stringify({version:'1.20.3',upstream:'https://github.com/chatboxai/chatbox/releases/tag/v1.20.3',installerSha256:expected,archiveSha256:hash(archive),patches},null,2));
+console.log('Prepared official Chatbox 1.20.3 with five auditable integration patches:',out);

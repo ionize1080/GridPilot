@@ -53,6 +53,7 @@ namespace SheetPilot.Excel
         [ExcelCommand(Name = "GridPilot_SimpleMask")] public static void SimpleMaskCommand() => Guard(() => Tools?.Execute("GridPilot_SimpleMask"));
         [ExcelCommand(Name = "GridPilot_Mask")] public static void Mask() => Guard(() => Tools?.Execute("GridPilot_Mask"));
         [ExcelCommand(Name = "GridPilot_Undo")] public static void Undo() => Guard(() => Tools?.Execute("GridPilot_Undo"));
+        [ExcelCommand(Name = "GridPilot_AI")] public static void Ai() => Guard(() => Tools?.Execute("GridPilot_AI"));
         [ExcelCommand(Name = "GridPilot_Settings")] public static void Settings() => Guard(() => Tools?.Execute("GridPilot_Settings"));
         [ExcelCommand(Name = "GridPilot_CopyInternal")] public static void CopyInternal() => Guard(() => Tools?.Execute("GridPilot_CopyInternal"));
         [ExcelCommand(Name = "GridPilot_CopyValues")] public static void CopyValues() => Guard(() => Tools?.Execute("GridPilot_CopyValues"));

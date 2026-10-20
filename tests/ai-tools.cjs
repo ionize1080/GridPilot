@@ -1,0 +1,20 @@
+const assert=require('node:assert/strict');
+const {tools,handleTool}=require('../integrations/chatbox/tools.cjs');
+(async()=>{
+  assert.equal(tools.length,4);assert(!tools.some(t=>/apply|undo/.test(t.name)));
+  let calls=0,last,published;
+  const host=async request=>{calls++;last=request;return {total:2,cells:[],proposalId:'proposal'};};
+  const publish=value=>published=value;
+  const snapshotId='a'.repeat(32);
+  let result=await handleTool({name:'aiApply',arguments:{snapshotId}},host,publish);
+  assert(result.isError);assert.equal(calls,0);
+  result=await handleTool({name:'excel_read',arguments:{snapshotId:'another book'}},host,publish);
+  assert(result.isError);assert.equal(calls,0);
+  await handleTool({name:'excel_read',arguments:{snapshotId,action:'aiApply',operation:'delete',offset:200}},host,publish);
+  assert.equal(last.action,'aiRead');assert.equal(last.operation,'read');assert.equal(last.snapshotId,snapshotId);assert.equal(last.offset,200);
+  await handleTool({name:'excel_propose_formula',arguments:{snapshotId,sheet:'Sales',address:'D2',formula:'=SUM(B2:B5)',action:'aiApply'}},host,publish);
+  assert.equal(last.action,'aiPropose');assert.equal(published.proposalId,'proposal');
+  result=await handleTool({name:'excel_statistics',arguments:{snapshotId}},async()=>{throw Error('expired');},publish);
+  assert(result.isError);assert.equal(result.content[0].text,'expired');
+  console.log('PASS Excel MCP contract: no mutation tools, snapshot validation, allowlisted parameters, proposal-only writes, errors');
+})().catch(error=>{console.error(error);process.exitCode=1;});

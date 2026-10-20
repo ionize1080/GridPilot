@@ -16,7 +16,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Cold native-host color picker tests failed.' }
     & '.\tests\SheetPilot.Tests\bin\Release\net462\SheetPilot.Tests.exe' --release-features
     if ($LASTEXITCODE -ne 0) { throw 'Release feature tests failed.' }
-    foreach($suite in @('--navigation-host','--upgrade','--v1','--v11','--multi-sort')) {
+    foreach($suite in @('--navigation-host','--upgrade','--v1','--v11','--multi-sort','--ai')) {
         & '.\tests\SheetPilot.Tests\bin\Release\net462\SheetPilot.Tests.exe' $suite
         if ($LASTEXITCODE -ne 0) { throw "Regression tests failed: $suite" }
     }
@@ -25,12 +25,14 @@ try {
     Copy-Item -LiteralPath 'src\SheetPilot.Excel\bin\Release\net462\publish\SheetPilot-AddIn64-packed.xll' -Destination 'dist\GridPilot-x64.xll'
     Get-ChildItem 'src/SheetPilot.Excel/bin/Release/net462/*.dll' | Copy-Item -Destination 'dist' -Force
     Copy-Item -LiteralPath 'App' -Destination 'dist' -Recurse -Force
+    if (-not (Test-Path '.temp/Chatbox/bootstrap.cjs')) { throw 'Run prepare-chatbox.ps1 to prepare the pinned official Chatbox 1.20.3 bundle.' }
+    Copy-Item -LiteralPath '.temp/Chatbox' -Destination 'dist' -Recurse -Force
     if (-not $BrowserRuntime) { $BrowserRuntime=Join-Path $PSScriptRoot '.temp/Browser' }
     if (-not (Test-Path (Join-Path $BrowserRuntime 'electron.exe'))) { throw 'Run prepare-browser.ps1 or provide -BrowserRuntime. No runtime installation is needed.' }
     $previousElectronMode=$env:ELECTRON_RUN_AS_NODE
     try {
         $env:ELECTRON_RUN_AS_NODE='1'
-        foreach($suite in @('tests/reconcile.cjs','tests/reconcile-manager.cjs')) {
+        foreach($suite in @('tests/reconcile.cjs','tests/reconcile-manager.cjs','tests/ai-tools.cjs')) {
             $testProcess=Start-Process -FilePath (Join-Path $BrowserRuntime 'electron.exe') -ArgumentList $suite -WorkingDirectory $PSScriptRoot -WindowStyle Hidden -Wait -PassThru
             if ($testProcess.ExitCode -ne 0) { throw "Reconciliation tests failed: $suite" }
         }

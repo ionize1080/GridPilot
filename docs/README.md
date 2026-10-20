@@ -1,5 +1,7 @@
 # 文档目录
 
+- [v1.7 AI 助手发布说明](releases/RELEASE-v1.7.0.md)、[交互调研与设计](v1.7/DESIGN.md)、[验证记录](v1.7/VALIDATION.md)
+
 - [多级排序使用说明](guides/SORTING.txt)
 - [复制](guides/COPYING.txt)、[简易脱敏](guides/SIMPLE-MASKING.txt)、[数据库](guides/DATABASE.txt)、[监管核对](guides/RECONCILIATION.txt)
 - [架构](development/ARCHITECTURE.txt)、[构建](development/BUILD.txt)
