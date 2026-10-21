@@ -30,7 +30,7 @@ readline.createInterface({input:socket}).on('line',line=>{
 function disconnect(){for(const p of pending.values()){clearTimeout(p.timer);p.reject(Error('Excel已关闭。'));}pending.clear();app.exit(0);}
 socket.on('close',disconnect);socket.on('error',disconnect);
 function publish(data){primary?.webContents.send('gridpilot:result',data);}
-const allowed=new Set(['aiContext','aiCapture','aiRead','aiPropose','aiApply','aiUndo','aiNavigate','aiApplyBatch','aiMode','aiApproval','aiCheckpoint','aiRestore','aiOpenRecovery','cancel']);
+const allowed=new Set(['aiContext','aiCapture','aiRead','aiPropose','aiApply','aiUndo','aiNavigate','aiApplyBatch','aiMode','aiApproval','aiConversation','aiDiscard','aiCheckpoint','aiRestore','aiOpenRecovery','cancel']);
 ipcMain.handle('gridpilot:request',async(event,message)=>{
   if(!primary || event.sender!==primary.webContents || event.senderFrame!==primary.webContents.mainFrame ||
      !event.senderFrame.url.startsWith('file:') || !allowed.has(message?.action) || JSON.stringify(message).length>8*1024*1024)

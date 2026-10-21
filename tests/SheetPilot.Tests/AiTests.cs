@@ -19,6 +19,8 @@ internal static partial class Program
     [DllImport("user32.dll", EntryPoint="GetWindow")] private static extern IntPtr AiOwner(IntPtr window,uint command);
     [DllImport("user32.dll", EntryPoint="PostMessage")] private static extern bool AiPost(IntPtr window, int message, IntPtr w, IntPtr l);
     [DllImport("user32.dll", EntryPoint="EnumWindows")] private static extern bool AiEnumTop(AiEnumWindow callback,IntPtr data);
+    [DllImport("user32.dll", EntryPoint="GetWindowText",CharSet=CharSet.Unicode)] private static extern int AiText(IntPtr hwnd,StringBuilder text,int size);
+    [DllImport("user32.dll", EntryPoint="IsWindowVisible")] private static extern bool AiVisible(IntPtr hwnd);
     private static void AiHostTest(string addin, int mode, bool installed = false)
     {
         dynamic app = null; Process browser = null;
@@ -113,15 +115,27 @@ internal static partial class Program
             app.RegisterXLL(addin);app.Run("GridPilot_AI");
             Console.WriteLine("READY synthetic Excel for computer-use");
             string stop=System.IO.Path.Combine(directory,"stop-ui-test");
-            while(!System.IO.File.Exists(stop)){System.Windows.Forms.Application.DoEvents();System.Threading.Thread.Sleep(50);}
+            int sequence=0;dynamic other=null;
+            while(!System.IO.File.Exists(stop)){
+                System.Windows.Forms.Application.DoEvents();System.Threading.Thread.Sleep(50);
+                string input=System.IO.Path.Combine(directory,"ui-command.json");
+                if(!System.IO.File.Exists(input))continue;
+                JObject command;try{command=JObject.Parse(System.IO.File.ReadAllText(input));}catch{continue;}
+                if((int)command["sequence"]<=sequence)continue;sequence=(int)command["sequence"];
+                if((string)command["action"]=="newBook")other=app.Workbooks.Add(-4167);
+                if((string)command["action"]=="originalBook"){book.Activate();if(other!=null){other.Close(false);other=null;}}
+                IntPtr chrome=IntPtr.Zero;AiEnumTop((hwnd,unused)=>{var title=new StringBuilder(128);AiText(hwnd,title,128);if(title.ToString()=="Chatbox"){chrome=hwnd;return false;}return true;},IntPtr.Zero);
+                var state=new JObject{["sequence"]=sequence,["present"]=chrome!=IntPtr.Zero,["visible"]=chrome!=IntPtr.Zero&&AiVisible(chrome),["docked"]=chrome!=IntPtr.Zero&&AiOwner(chrome,4)==new IntPtr((int)app.Hwnd),["unowned"]=chrome!=IntPtr.Zero&&AiOwner(chrome,4)==IntPtr.Zero};
+                System.IO.File.WriteAllText(System.IO.Path.Combine(directory,"ui-state.json"),state.ToString());
+            }
             Check((string)sheet.Range["E8"].Value2=="焦点保护哨兵","computer-use typing never modified active Excel cell");
             book.Close(false);
         }finally{app.Quit();Marshal.ReleaseComObject(app);}
     }
     private static void AiTests(bool excel)
     {
-        System.IO.Directory.CreateDirectory("docs/v1.9");
-        using(var icon=RibbonIcons.Draw("GridPilot_AI",96))icon.Save("docs/v1.9/ai-icon.png");
+        System.IO.Directory.CreateDirectory("docs/v1.9.1");
+        using(var icon=RibbonIcons.Draw("GridPilot_AI",96))icon.Save("docs/v1.9.1/ai-icon.png");
         Check(!new ToolPreferences{AiEnabled=false}.IsEnabled("GridPilot_AI"),"AI can be disabled");
         Check(AiRange.Parse("XFD1048576").Size==1,"maximum Excel address valid");
         foreach(string address in new[]{"XFE1","A1048577","A0","A:A","[other]A1"}){bool bad=false;try{AiRange.Parse(address);}catch(InvalidOperationException){bad=true;}Check(bad,"reject invalid range "+address);}
@@ -184,6 +198,7 @@ internal static partial class Program
                 Check((string)end["cells"][0]["address"]=="XFD1048576","sparse full-sheet capture includes final cell");
                 AiBatchTests(ai,app,sheet,(string)entire["snapshotId"]);
                 AiProtectionTests(app);
+                AiUsabilityTests(app);
                 book.Close(false);
                 bool closed = false; try { ai.Read(new JObject { ["snapshotId"] = id, ["operation"] = "read" }); } catch (InvalidOperationException) { closed = true; }
                 Check(closed, "closed workbook invalidates snapshots");

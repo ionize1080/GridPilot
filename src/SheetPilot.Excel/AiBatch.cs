@@ -45,7 +45,7 @@ namespace SheetPilot.Excel
             var snapshot=Get((string)request["snapshotId"]);
             string name=(string)request["sheet"],address=(string)request["address"],kind=(string)request["kind"]??"formula";
             var bounds=AiRange.Parse(address);object sheet=Worksheet(snapshot,name),range=null;
-            var p=new Proposal{id=Guid.NewGuid().ToString("N"),snapshot=snapshot.id,sheet=name,address=address,kind=kind,options=(JObject)request.DeepClone()};
+            var p=new Proposal{id=Guid.NewGuid().ToString("N"),sequence=++proposalSequence,snapshot=snapshot.id,sheet=name,address=address,kind=kind,options=(JObject)request.DeepClone()};
             try
             {
                 range=((dynamic)sheet).Range[address];
@@ -91,8 +91,8 @@ namespace SheetPilot.Excel
                 }
                 else throw new InvalidOperationException("未知的建议类型。");
                 proposals.Add(p.id,p);
-                bool applied = automatic;
-                if (applied) { try { ApplyBatch(new[] { p.id }); } catch { automatic=false; throw; } }
+                bool applied = AutomaticFor(snapshot.book);
+                if (applied) { try { ApplyBatch(new[] { p.id }); } catch { if(CurrentApproval()?.scope!="workbook")automatic=false; throw; } }
                 return new{proposalId=p.id,snapshotId=p.snapshot,book=snapshot.bookName,sheet=name,address,kind,formula=p.formula,data=request["data"],style=p.style,title=request["title"],before=p.edits?.Take(6).Select(e=>e.beforeFormula).ToArray(),count=p.edits?.LongLength??bounds.Size,applied,checkpoint=CheckpointState(),status=applied?"已自动应用；已保留变更前后快照。":"待一键应用，尚未写入 Excel。"};
             }finally{Release(range);Release(sheet);}
         }
@@ -250,26 +250,45 @@ namespace SheetPilot.Excel
             }finally{Release(range);Release(sheet);}
         }
         public object Apply(string id,bool revert=false) => revert?ApplyBatch(null,true):ApplyBatch(new[]{id});
+        public object Discard(string[] ids) { foreach(var id in ids??new string[0])proposals.Remove(id);return new {message="已清空所选待应用建议。"}; }
+        private Proposal[] ResolveBatch(Proposal[] source)
+        {
+            var result=new List<Proposal>();
+            var seen=new HashSet<Tuple<object,string,string,string>>();
+            foreach(var p in source.OrderByDescending(p=>p.sequence))
+            {
+                object book=Get(p.snapshot).book;
+                if(p.edits!=null){var copy=p.Copy();copy.edits=p.edits.Where(e=>seen.Add(Tuple.Create(book,p.sheet,e.address,"content"))).ToArray();if(copy.edits.Length>0)result.Add(copy);}
+                else if(p.kind=="format")
+                {
+                    var area=AiRange.Parse(p.address);
+                    if(!source.Any(other=>other!=p&&other.kind=="format"&&other.sheet==p.sheet&&ReferenceEquals(Get(other.snapshot).book,book)&&RangesOverlap(area,AiRange.Parse(other.address)))){result.Add(p);continue;}
+                    var bounds=AiRange.Parse(p.address);if(bounds.Size>100000)throw new InvalidOperationException("单次格式批量应用最多 100,000 格，请缩小范围。");
+                    for(int r=bounds.Row;r<=bounds.LastRow;r++)for(int c=bounds.Column;c<=bounds.LastColumn;c++)
+                    {
+                        var copy=p.Copy();copy.address=Address(r,c);copy.style=new JObject();copy.beforeStyle=new JObject();
+                        foreach(var f in p.style.Properties())if(seen.Add(Tuple.Create(book,p.sheet,copy.address,f.Name))){copy.style[f.Name]=f.Value.DeepClone();copy.beforeStyle[f.Name]=p.beforeStyle[f.Name].DeepClone();}
+                        if(copy.style["fill_color"]!=null)copy.beforeStyle["fill_pattern"]=p.beforeStyle["fill_pattern"].DeepClone();
+                        if(copy.style.HasValues)result.Add(copy);
+                    }
+                }
+                else result.Add(p);
+            }
+            return result.OrderBy(p=>p.edits!=null?0:p.kind=="format"?1:2).ThenBy(p=>p.sequence).ToArray();
+        }
+        private static bool RangesOverlap(AiRange a,AiRange b) => a.Row<=b.LastRow&&b.Row<=a.LastRow&&a.Column<=b.LastColumn&&b.Column<=a.LastColumn;
         public object ApplyBatch(string[] ids,bool revert=false)
         {
             if(revert)return RestoreCheckpoint(true);
             Proposal[] batch;
-            if(revert)batch=undo??throw new InvalidOperationException("没有可撤销的 AI 修改。");
-            else
-            {
                 if(ids==null||ids.Length==0||ids.Distinct().Count()!=ids.Length)throw new InvalidOperationException("请选择待应用的建议。");
-                batch=ids.Select(id=>id!=null&&proposals.TryGetValue(id,out var p)?p:throw new InvalidOperationException("建议已过期，请重新生成。")).ToArray();
-                for(int i=0;i<batch.Length;i++)for(int j=0;j<i;j++)
-                {
-                    var x=batch[i];var y=batch[j];
-                    if(!ReferenceEquals(Get(x.snapshot).book,Get(y.snapshot).book)||x.sheet!=y.sheet||x.kind=="chart"||y.kind=="chart"||x.kind=="pivot"||y.kind=="pivot"||(x.kind=="format")!= (y.kind=="format"))continue;
-                    var a=AiRange.Parse(x.address);var b=AiRange.Parse(y.address);
-                    if(a.Row<=b.LastRow&&b.Row<=a.LastRow&&a.Column<=b.LastColumn&&b.Column<=a.LastColumn)throw new InvalidOperationException("待应用建议包含重叠目标，请丢弃旧建议后重试。");
-                }
-            }
+                var valid=ids.Where(id=>id!=null&&proposals.ContainsKey(id)).Select(id=>proposals[id]).ToArray();
+                if(valid.Length==0)return new{message="待应用建议已过期，已清理；请重新生成。",appliedIds=new string[0],retiredIds=ids,checkpoint=CheckpointState()};
+                batch=ResolveBatch(valid);
             foreach(var p in batch)CheckProposal(p,revert);
-            CheckCheckpointExtension(batch);
-            bool extend = automatic && !newCheckpoint && undo != null;
+            bool batchAutomatic=batch.All(p=>AutomaticFor(Get(p.snapshot).book));
+            CheckCheckpointExtension(batch,batchAutomatic);
+            bool extend = batchAutomatic && !newCheckpoint && undo != null;
             string folder = extend ? checkpointFolder : SaveCheckpoint(batch, "before");
             Proposal[] candidate=null;
             dynamic app=application();bool events=app.EnableEvents,screen=app.ScreenUpdating;var written=new List<Proposal>();
@@ -290,9 +309,9 @@ namespace SheetPilot.Excel
             finally{app.EnableEvents=events;app.ScreenUpdating=screen;}
             undo=candidate;
             checkpointFolder=folder;checkpointBefore=false;newCheckpoint=false;
-            foreach(var p in batch)proposals.Remove(p.id);
+            foreach(var id in ids)proposals.Remove(id);
             foreach(var key in snapshots.Keys.Where(key=>!snapshotOrder.Contains(key)&&!undo.Any(p=>p.snapshot==key)).ToArray()){snapshots[key].Dispose();snapshots.Remove(key);}
-            return new{message="已应用 "+batch.Length+" 项建议；前后快照已保存。",appliedIds=batch.Select(p=>p.id).ToArray(),checkpoint=CheckpointState()};
+            return new{message="已应用 "+valid.Length+" 项建议；重叠内容采用最新建议，前后快照已保存。",appliedIds=valid.Select(p=>p.id).ToArray(),retiredIds=ids,checkpoint=CheckpointState()};
         }
     }
 }

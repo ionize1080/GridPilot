@@ -39,7 +39,9 @@ internal static partial class Program
                             case "aiInspect":result=ai.Metadata((string)m["snapshotId"]);break;
                             case "aiPropose":result=ai.Propose(m);break;
                             case "aiApplyBatch":result=ai.ApplyBatch(m["proposalIds"].ToObject<string[]>());break;
-                            case "aiApproval":result=ai.Approval((bool)m["enabled"]);break;
+                            case "aiApproval":result=ai.Approval((bool)m["enabled"],(string)m["scope"]??"session");break;
+                            case "aiConversation":result=ai.ConversationChanged();break;
+                            case "aiDiscard":result=ai.Discard(m["proposalIds"]?.ToObject<string[]>());break;
                             case "aiCheckpoint":result=ai.CheckpointState();break;
                             case "aiUndo":result=ai.RestoreCheckpoint(true);break;
                             case "aiRestore":result=ai.RestoreCheckpoint((string)m["position"]=="before");break;

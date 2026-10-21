@@ -6,7 +6,7 @@ const {Client}=require('../integrations/chatbox/node_modules/@modelcontextprotoc
 const {StdioClientTransport}=require('../integrations/chatbox/node_modules/@modelcontextprotocol/sdk/dist/cjs/client/stdio.js');
 const root=path.resolve(__dirname,'..'),profile=fs.mkdtempSync(path.join(root,'.temp/ai-ui-'));
 const pipe='GridPilot-'+crypto.randomBytes(16).toString('hex'),snapshotId='a'.repeat(32);
-let application,socket,mcpClient,applied=0,captured=0;
+let application,socket,mcpClient,applied=0,captured=0,approval={automatic:false,available:false};
 const modelRequests=[],modelHeaders=[];
 const modelServer=http.createServer((req,res)=>{
   let text='';req.on('data',d=>text+=d);req.on('end',()=>{
@@ -24,7 +24,10 @@ const modelServer=http.createServer((req,res)=>{
 });
 const capture={snapshotId,book:'合成销售.xlsx',scope:'selection',capturedAt:new Date().toISOString(),excelVersion:'16.0',ranges:[{sheet:'销售',address:'A1:C4'}],scannedCells:12,nonEmptyCells:10,sample:[{sheet:'销售',address:'B2',value:10,formula:null}],statistics:{sum:60,numericCount:3}};
 function respond(m){
-  if(m.action==='aiCheckpoint'||m.action==='aiApproval')return {automatic:!!m.enabled,available:false};
+  if(m.action==='aiApproval'){approval={automatic:!!m.enabled,approvalScope:m.scope,available:false};return approval;}
+  if(m.action==='aiCheckpoint')return approval;
+  if(m.action==='aiConversation'){if(approval.approvalScope==='session')approval.automatic=false;return approval;}
+  if(m.action==='aiDiscard')return {message:'已清空'};
   if(m.action==='aiReady')return {mode:'window',version:'1.20.3'};
   if(m.action==='aiContext')return {available:true,book:'合成销售.xlsx',sheet:'销售',selection:'A1:C4'};
   if(m.action==='aiCapture'){captured++;return {...capture,scope:m.scope};}
@@ -39,7 +42,7 @@ function respond(m){
 const server=net.createServer(s=>{
   socket=s;let text='';s.on('data',data=>{text+=data;let at;while((at=text.indexOf('\n'))>=0){
     const m=JSON.parse(text.slice(0,at));text=text.slice(at+1);
-    try{s.write(JSON.stringify({id:m.id,data:respond(m)})+'\n');}catch(e){s.write(JSON.stringify({id:m.id,error:e.message})+'\n');}
+    try{const reply=JSON.stringify({id:m.id,data:respond(m)})+'\n';if(m.action==='aiApplyBatch')setTimeout(()=>s.write(reply),900);else s.write(reply);}catch(e){s.write(JSON.stringify({id:m.id,error:e.message})+'\n');}
   }});
 });
 (async()=>{
@@ -68,6 +71,14 @@ const server=net.createServer(s=>{
     console.log('Native Chatbox ready',await page.locator('body').innerText().then(s=>s.slice(0,1200)));
     assert.equal(await page.locator('#gridpilot-excel').isVisible(),false,'idle integration uses no extra panel');
     assert(await page.locator('#gridpilot-toolbar-slot #gridpilot-excel-tools').count());
+    await page.getByLabel('Excel工具',{exact:true}).click();await page.getByRole('switch').click();
+    await page.waitForFunction(()=>!document.querySelector('.gp-menu').open);
+    assert(approval.automatic&&approval.approvalScope==='workbook','default opt-in scope is current workbook');
+    await page.getByLabel('Excel工具',{exact:true}).click();await page.locator('#message-input').focus();assert.equal(await page.locator('.gp-menu').evaluate(e=>e.open),false,'focus input closes menu');
+    await page.getByLabel('Excel工具',{exact:true}).click();await page.keyboard.press('Escape');assert.equal(await page.locator('.gp-menu').evaluate(e=>e.open),false,'Escape closes menu');
+    await page.getByLabel('Excel工具',{exact:true}).click();await page.locator('body').click({position:{x:15,y:250}});assert.equal(await page.locator('.gp-menu').evaluate(e=>e.open),false,'outside pointer closes menu');
+    await page.getByLabel('Excel工具',{exact:true}).click();await page.getByRole('switch').click();await page.waitForFunction(()=>!document.querySelector('.gp-menu').open);
+    console.log('PASS approval popup dismisses on action, outside click, input focus and Escape');
     await page.screenshot({path:path.join(root,'.temp/ai-ui-inspect.png')});
     await page.getByLabel('Excel工具',{exact:true}).click();
 
@@ -95,6 +106,10 @@ const server=net.createServer(s=>{
     console.log('Proposal DOM:',await page.locator('#gridpilot-excel').evaluate(e=>({text:e.textContent,details:[...e.querySelectorAll('details')].map(d=>d.open)})));
     await page.screenshot({path:path.join(root,'.temp/ai-proposal-inspect.png')});
     await page.locator('#gridpilot-excel button').filter({hasText:'一键应用'}).click();assert.equal(applied,1);
+    const working=page.getByRole('button',{name:'正在应用并保存快照…',exact:true});assert(await working.isDisabled());
+    const colors=await working.evaluate(e=>({color:getComputedStyle(e).color,background:getComputedStyle(e).backgroundColor,opacity:getComputedStyle(e).opacity}));assert.equal(colors.color,'rgb(255, 255, 255)');assert.equal(colors.background,'rgb(73, 110, 100)');assert.equal(colors.opacity,'1');
+    fs.mkdirSync(path.join(root,'docs/v1.9.1'),{recursive:true});await page.locator('#gridpilot-excel').screenshot({path:path.join(root,'docs/v1.9.1/applying.png')});
+    await page.waitForFunction(()=>!document.querySelector('#gridpilot-excel .gp-primary'));console.log('PASS clear, high-contrast applying state and finished batch');
     await page.getByLabel('Excel工具',{exact:true}).click();await page.locator('#gridpilot-excel-tools button').filter({hasText:'撤销上次应用'}).click();await page.getByLabel('Excel工具',{exact:true}).click();
     await page.getByLabel('Excel上下文范围').selectOption('selection');
     await page.getByText('选择模型',{exact:true}).click();
@@ -128,11 +143,11 @@ const server=net.createServer(s=>{
     await page.waitForTimeout(300);
     assert(modelRequests.some(r=>JSON.stringify(r.messages).includes('GridPilot PDF attachment verification')),'native model receives parsed PDF text');
     console.log('PASS native TXT/PDF/DOCX parsing, Unicode picker path, PDF message through Chatbox provider');
-    fs.mkdirSync(path.join(root,'docs/v1.9'),{recursive:true});
-    await page.screenshot({animations:'disabled',path:path.join(root,'docs/v1.9/chatbox-window.png')});
+    fs.mkdirSync(path.join(root,'docs/v1.9.1'),{recursive:true});
+    await page.screenshot({animations:'disabled',path:path.join(root,'docs/v1.9.1/chatbox-window.png')});
     await application.evaluate(({BrowserWindow})=>{const w=BrowserWindow.getAllWindows()[0];w.setSize(480,850);w.webContents.send('gridpilot:mode','sidebar');});
     await page.waitForFunction(()=>document.getElementById('gridpilot-excel')?.dataset.mode==='sidebar');
-    await page.screenshot({animations:'disabled',path:path.join(root,'docs/v1.9/chatbox-narrow.png')});
+    await page.screenshot({animations:'disabled',path:path.join(root,'docs/v1.9.1/chatbox-narrow.png')});
     const overflow=await page.locator('#gridpilot-excel').evaluate(e=>e.scrollWidth>e.clientWidth+2);assert.equal(overflow,false);
     await application.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].setSize(1100,850));
     await application.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].webContents.send('navigate-to','/settings/provider'));
@@ -140,7 +155,7 @@ const server=net.createServer(s=>{
     await page.getByText('API 密钥',{exact:true}).waitFor();
     await page.waitForTimeout(400); // Native modal transition, before the documentation screenshot.
     console.log('Native settings:',(await page.locator('body').innerText()).slice(-1500));
-    await page.screenshot({animations:'disabled',path:path.join(root,'docs/v1.9/chatbox-settings.png')});
+    await page.screenshot({animations:'disabled',path:path.join(root,'docs/v1.9.1/chatbox-settings.png')});
     assert.deepEqual(errors,[]);
     console.log('PASS official native UI, Chinese draft, context opt-out, full-scope MCP, stdio transport, proposal/apply/undo, narrow layout');
   }finally{if(mcpClient)await mcpClient.close();if(application)await application.close();socket?.destroy();server.close();modelServer.close();}

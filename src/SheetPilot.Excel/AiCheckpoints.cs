@@ -8,16 +8,38 @@ namespace SheetPilot.Excel
 {
     public sealed partial class AiOperations
     {
-        private bool automatic, checkpointBefore, newCheckpoint = true;
-        private string checkpointFolder;
-        public object Approval(bool enabled)
+        private bool checkpointBefore, newCheckpoint = true;
+        private sealed class ApprovalGrant { public object book; public string scope; }
+        private readonly List<ApprovalGrant> approvals = new List<ApprovalGrant>();
+        private ApprovalGrant CurrentApproval()
         {
-            if (enabled && !automatic) newCheckpoint = true;
-            automatic = enabled;
+            object book=null,books=null;
+            try {
+                books=((dynamic)application()).Workbooks;var opened=new List<object>();
+                try { for(int i=1;i<=(int)((dynamic)books).Count;i++)opened.Add(((dynamic)books).Item[i]);
+                    foreach(var grant in approvals.ToArray())if(!opened.Any(b=>ReferenceEquals(b,grant.book))){approvals.Remove(grant);Release(grant.book);}
+                } finally { foreach(var b in opened)Release(b); }
+                book=((dynamic)application()).ActiveWorkbook;return approvals.FirstOrDefault(g=>ReferenceEquals(g.book,book));
+            } finally { Release(book);Release(books); }
+        }
+        private bool automatic { get => CurrentApproval()!=null; set { if(!value)Approval(false); } }
+        private bool AutomaticFor(object book) => ReferenceEquals(CurrentApproval()?.book,book);
+        private string checkpointFolder;
+        public object Approval(bool enabled, string scope = "session")
+        {
+            if(scope!="session"&&scope!="workbook")throw new InvalidOperationException("请选择本次对话或当前工作簿。");
+            var current=CurrentApproval();
+            if(current!=null){approvals.Remove(current);Release(current.book);}
+            if(enabled){object book=((dynamic)application()).ActiveWorkbook;if(book==null)throw new InvalidOperationException("请先打开工作簿。");approvals.Add(new ApprovalGrant{book=book,scope=scope});if(current==null)newCheckpoint=true;}
             return CheckpointState();
         }
-        public object CheckpointState() => new { automatic, available = undo != null, position = checkpointBefore ? "before" : "after", folder = checkpointFolder,
-            message = automatic ? "自动批准已开启；首次修改前保存完整备份。" : "逐次批准；修改前后均保留快照。" };
+        public object ConversationChanged()
+        {
+            foreach(var grant in approvals.Where(g=>g.scope=="session").ToArray()){approvals.Remove(grant);Release(grant.book);}
+            return CheckpointState();
+        }
+        public object CheckpointState() { var grant=CurrentApproval();return new { automatic=grant!=null, approvalScope=grant?.scope, approvalBook=grant==null?null:(string)((dynamic)grant.book).Name, available = undo != null, position = checkpointBefore ? "before" : "after", folder = checkpointFolder,
+            message = grant!=null ? "自动批准已开启；修改前后保存完整备份。" : "逐次批准；修改前后均保留快照。" }; }
         private string SaveCheckpoint(Proposal[] batch, string label, string folder = null)
         {
             folder = folder ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "GridPilot", "Recovery", DateTime.Now.ToString("yyyyMMdd-HHmmss") + "-" + Guid.NewGuid().ToString("N"));
@@ -75,13 +97,14 @@ namespace SheetPilot.Excel
                 }finally{Release(range);Release(sheet);}
             }
         }
-        private void CheckCheckpointExtension(Proposal[] batch)
+        private void CheckCheckpointExtension(Proposal[] batch,bool batchAutomatic)
         {
-            if (!automatic || newCheckpoint || undo == null) return;
-            if (checkpointBefore) throw new InvalidOperationException("当前为变更前快照，请先切换至变更后再继续自动批准。");
+            if (!batchAutomatic || newCheckpoint || undo == null) return;
+            if (checkpointBefore) { newCheckpoint=true;return; }
             if (batch.Any(p => !ReferenceEquals(Get(p.snapshot).book, Get(undo[0].snapshot).book)))
-                throw new InvalidOperationException("自动批准绑定当前工作簿。请关闭再开启自动批准，为另一工作簿建立新快照。");
-            foreach (var p in undo) CheckProposal(p, true);
+                {newCheckpoint=true;return;}
+            try { foreach (var p in undo) CheckProposal(p, true); }
+            catch { newCheckpoint=true;return; } // Keep older full backups; start from the current live workbook.
             // Content can be coalesced cell-by-cell. Overlapping format patches need
             // separate checkpoints so mixed styles are never flattened on restore.
             foreach (var p in batch.Where(p => p.kind == "format")) foreach (var old in undo.Where(x => x.kind == "format"))
@@ -89,7 +112,7 @@ namespace SheetPilot.Excel
                 if (old.sheet != p.sheet) continue;
                 var a = AiRange.Parse(p.address); var b = AiRange.Parse(old.address);
                 if (a.Row <= b.LastRow && b.Row <= a.LastRow && a.Column <= b.LastColumn && b.Column <= a.LastColumn)
-                    throw new InvalidOperationException("此格式与当前快照中的格式修改重叠。请关闭自动批准后单独应用，保留独立恢复点。");
+                    {newCheckpoint=true;return;}
             }
         }
         public object RestoreCheckpoint(bool before)
@@ -111,8 +134,8 @@ namespace SheetPilot.Excel
                 throw new InvalidOperationException(failures.Count == 0 ? "切换失败，已恢复当前状态：" + ex.Message : "切换未完全恢复，请使用本地完整备份：" + checkpointFolder);
             }
             finally { app.EnableEvents = events; app.ScreenUpdating = screen; }
-            checkpointBefore = before; automatic = false;
-            return new { message = before ? "已还原变更前；自动批准已关闭。" : "已恢复变更后。", checkpoint = CheckpointState() };
+            checkpointBefore = before;if(CurrentApproval()?.scope!="workbook")automatic = false;
+            return new { message = before ? "已还原变更前。" : "已恢复变更后。", checkpoint = CheckpointState() };
         }
     }
 }

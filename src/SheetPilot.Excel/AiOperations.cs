@@ -19,6 +19,7 @@ namespace SheetPilot.Excel
         private readonly Queue<string> snapshotOrder = new Queue<string>();
         private readonly Dictionary<string, Proposal> proposals = new Dictionary<string, Proposal>();
         private Proposal[] undo;
+        private long proposalSequence;
         private bool disposed;
         private sealed class Cell
         {
@@ -42,6 +43,8 @@ namespace SheetPilot.Excel
         }
         private sealed class Proposal
         {
+            public long sequence;
+            public Proposal Copy() => (Proposal)MemberwiseClone();
             public string id, snapshot, sheet, address, formula;
             public string kind, chartName;
             public JObject style, beforeStyle, afterStyle;
@@ -335,6 +338,6 @@ namespace SheetPilot.Excel
             }
             finally { Release(range); Release(sheet); Release(sheets); }
         }
-        public void Dispose() { disposed=true;CancelCapture=true;foreach (var snapshot in snapshots.Values) snapshot.Dispose(); snapshots.Clear(); snapshotOrder.Clear(); proposals.Clear(); undo = null; }
+        public void Dispose() { disposed=true;CancelCapture=true;foreach(var grant in approvals)Release(grant.book);approvals.Clear();foreach (var snapshot in snapshots.Values) snapshot.Dispose(); snapshots.Clear(); snapshotOrder.Clear(); proposals.Clear(); undo = null; }
     }
 }

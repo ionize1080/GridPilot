@@ -3,7 +3,7 @@
   const {contextBridge:bridge,ipcRenderer:ipc}=require('electron');
   let scope='selection',entries=[],bar,context={},busy=false,status='',mode='window';
   const request=(action,args={})=>ipc.invoke('gridpilot:request',{...args,action});
-  let checkpoint={},progress=null,capturing=false;
+  let checkpoint={},progress=null,capturing=false,approvalScope='workbook',busyLabel='',failed=false;
   const marker='\n\n[GridPilot Excel context]\n';
   const snapshots=new Map(),snapshotChats=new Map();
   const chatKey=()=>decodeURIComponent(location.hash.split('/session/')[1]?.split('?')[0]||location.hash);
@@ -43,10 +43,11 @@
   ipc.on('gridpilot:mode',(_event,value)=>{mode=value;document.documentElement.dataset.gpMode=mode;if(mode==='sidebar')window.dispatchEvent(new Event('gridpilot:sidebar'));render();});
   const el=(tag,text)=>{const e=document.createElement(tag);if(text!==undefined)e.textContent=text;return e;};
   function button(text,action){const b=el('button',text);b.type='button';b.onclick=action;return b;}
-  async function run(fn){
-    if(busy)return;busy=true;
-    try{const r=await fn();if(r?.checkpoint)checkpoint=r.checkpoint;status=r?.message||'已完成';return r;}catch(e){status=e.message.replace(/^Error invoking remote method.*?Error: /,'');}
-    finally{busy=false;render();}
+  function closeMenu(){const menu=toolbar?.querySelector('.gp-menu');if(menu)menu.open=false;}
+  async function run(fn,label='正在处理…'){
+    closeMenu();if(busy)return;busy=true;busyLabel=label;status=label;failed=false;render();
+    try{const r=await fn();if(r?.checkpoint)checkpoint=r.checkpoint;status=r?.message||'已完成';return r;}catch(e){failed=true;status=e.message.replace(/^Error invoking remote method.*?Error: /,'');}
+    finally{busy=false;busyLabel='';render();}
   }
   function prompt(text){
     const input=document.querySelector('#message-input');
@@ -68,14 +69,16 @@
     const popup=el('div');popup.className='gp-popup';
     for(const [title,text]of [['解释公式','解释选中单元格的公式、引用范围与计算步骤。'],['生成内容','根据以下需求生成公式或表格内容，先提出整批建议供我一键应用：'],['分析数据','分析完整工作范围，使用工具计算并引用数据来源。']])popup.append(button(title,()=>{menu.open=false;prompt(text);}));
     popup.append(button('撤销上次应用',()=>run(()=>request('aiUndo'))),button(mode==='sidebar'?'切换独立窗口':'切换侧边栏',()=>{menu.open=false;return run(()=>request('aiMode',{mode:mode==='sidebar'?'window':'sidebar'}));}));
-    const approval=button(checkpoint.automatic?'自动批准 · 已开启':'自动批准 · 已关闭',()=>run(async()=>{checkpoint=await request('aiApproval',{enabled:!checkpoint.automatic});return checkpoint;}));
-    approval.setAttribute('role','switch');approval.setAttribute('aria-checked',String(!!checkpoint.automatic));approval.title='开启后自动写入，并保存完整工作簿备份。关闭窗口后需重新开启。';popup.append(approval);if(checkpoint.folder)popup.append(button('打开完整备份',()=>run(()=>request('aiOpenRecovery'))));
+    const approval=button(checkpoint.automatic?'自动批准 · 已开启':'自动批准 · 已关闭',()=>run(async()=>{checkpoint=await request('aiApproval',{enabled:!checkpoint.automatic,scope:approvalScope});return checkpoint;}));
+    approval.setAttribute('role','switch');approval.setAttribute('aria-checked',String(!!checkpoint.automatic));approval.title='开启后自动写入，并保存完整工作簿备份。';popup.append(approval);
+    const lifetime=el('select');lifetime.setAttribute('aria-label','自动批准有效范围');for(const [value,label]of [['workbook','本工作簿 · 多轮对话有效'],['session','仅本次对话']]){const option=el('option',label);option.value=value;lifetime.append(option);}lifetime.value=checkpoint.approvalScope||approvalScope;lifetime.onchange=()=>{approvalScope=lifetime.value;if(checkpoint.automatic)run(async()=>{checkpoint=await request('aiApproval',{enabled:true,scope:approvalScope});return checkpoint;});};popup.append(lifetime);
+    if(checkpoint.folder)popup.append(button('打开完整备份',()=>run(()=>request('aiOpenRecovery'))));
     const hint=el('small','本地保留变更前后备份；手工编辑冲突时停止覆盖。');hint.className='gp-hint';popup.append(hint);
     const manual=el('details');manual.append(el('summary','手动公式草稿'));
     const destination=el('input');destination.placeholder='D2';destination.setAttribute('aria-label','公式目标单元格');
     const formula=el('textarea');formula.placeholder='=SUM(B2:B10)';formula.setAttribute('aria-label','公式草稿');
     manual.append(destination,formula,button('加入待应用',()=>run(async()=>{const s=await request('aiCapture',{scope:'sheet'});snapshotChats.set(s.snapshotId,chatKey());await request('aiPropose',{snapshotId:s.snapshotId,sheet:s.ranges[0].sheet,address:destination.value,formula:formula.value});return {message:'已加入待应用建议'};})));popup.append(manual);menu.append(popup);toolbar.append(menu);
-    if(checkpoint.available){const history=el('div');history.className='gp-history';history.append(el('span',checkpoint.automatic?'自动批准 · 快照保护':'变更快照'));
+    if(checkpoint.available){const history=el('div');history.className='gp-history';history.append(el('span',checkpoint.automatic?(checkpoint.approvalScope==='workbook'?'本工作簿自动批准 · 快照保护':'自动批准 · 快照保护'):'变更快照'));
       for(const [position,label] of [['before','变更前'],['after','变更后']]){const b=button(label,()=>run(()=>request('aiRestore',{position})));b.disabled=busy||checkpoint.position===position;b.setAttribute('aria-pressed',String(checkpoint.position===position));history.append(b);}history.title=checkpoint.folder?'完整备份：'+checkpoint.folder:'保护本次 AI 修改';bar.append(history);}
     else if(checkpoint.automatic){const note=el('div','自动批准已开启 · 首次修改前创建备份');note.className='gp-feedback';bar.append(note);}
     const pending=entries.filter(e=>e.proposalId&&!e.applied&&e.chat===chatKey());
@@ -83,19 +86,20 @@
       const header=el('div');header.className='gp-row';const detail=el('details');detail.open=!!open;
       detail.append(el('summary',`${pending.length} 项待应用建议`));
       const list=el('div');list.className='gp-results';
-      for(const e of pending){const item=el('div');item.className='gp-result';item.append(el('strong',`${e.book} / ${e.sheet}!${e.address}`),el('code',e.formula||JSON.stringify(e.data||e.style||e.title||e.kind)),el('small','原内容：'+JSON.stringify(e.before??'')));item.append(button('定位',()=>run(()=>request('aiNavigate',{snapshotId:e.snapshotId,sheet:e.sheet,address:e.address.split(':')[0]}))),button('丢弃',()=>{entries=entries.filter(x=>x!==e);render();}));list.append(item);}
-      const apply=button('一键应用',()=>run(async()=>{const result=await request('aiApplyBatch',{proposalIds:pending.map(e=>e.proposalId)});for(const e of pending)if(result.appliedIds.includes(e.proposalId))e.applied=true;return result;}));apply.className='gp-primary';apply.disabled=busy;
-      header.append(detail,apply);detail.append(list);bar.append(header);
+      for(const e of pending){const item=el('div');item.className='gp-result';item.append(el('strong',`${e.book} / ${e.sheet}!${e.address}`),el('code',e.formula||JSON.stringify(e.data||e.style||e.title||e.kind)),el('small','原内容：'+JSON.stringify(e.before??'')));item.append(button('定位',()=>run(()=>request('aiNavigate',{snapshotId:e.snapshotId,sheet:e.sheet,address:e.address.split(':')[0]}))),button('丢弃',()=>run(async()=>{await request('aiDiscard',{proposalIds:[e.proposalId]});entries=entries.filter(x=>x!==e);return{message:'已丢弃此建议。'};})));list.append(item);}
+      const apply=button(busy?busyLabel:'一键应用',()=>run(async()=>{const result=await request('aiApplyBatch',{proposalIds:pending.map(e=>e.proposalId)});const retired=result.retiredIds||result.appliedIds||[];entries=entries.filter(e=>!retired.includes(e.proposalId));return result;},'正在应用并保存快照…'));apply.className='gp-primary';apply.disabled=busy;apply.setAttribute('aria-busy',String(busy));
+      const actions=el('div');actions.className='gp-actions';const clear=button('清空',()=>run(async()=>{await request('aiDiscard',{proposalIds:pending.map(e=>e.proposalId)});entries=entries.filter(e=>!pending.includes(e));return{message:'已清空待应用建议。'};}));clear.disabled=busy;actions.append(apply,clear);
+      header.append(detail,actions);detail.append(el('small','重叠单元格采用最新建议，其余内容保留。'),list);bar.append(header);
     }
     const citations=entries.find(e=>e.cells&&e.chat===chatKey());
     if(citations){const detail=el('details');detail.append(el('summary',citations.label));for(const c of citations.cells.slice(0,20))detail.append(button(c.sheet+'!'+c.address,()=>run(()=>request('aiNavigate',{snapshotId:citations.snapshotId,sheet:c.sheet,address:c.address}))));bar.append(detail);}
-    if(status){const feedback=el('div',status);feedback.setAttribute('role','status');feedback.className='gp-feedback';bar.append(feedback);}
+    if(status){const feedback=el('div',status);feedback.setAttribute('role',failed?'alert':'status');feedback.className='gp-feedback'+(failed?' gp-error':busy?' gp-working':' gp-success');bar.append(feedback);}
     bar.hidden=!bar.childElementCount;bar.dataset.mode=mode;renderProgress();mountModeButton();
   }
   function mountModeButton(){
     for(const controls of document.querySelectorAll('.controls.self-start')){let b=controls.parentElement.querySelector(':scope > .gp-window-mode');
       if(!b){b=button('',()=>run(()=>request('aiMode',{mode:mode==='sidebar'?'window':'sidebar'})));b.className='gp-window-mode';controls.before(b);}
-      b.title=mode==='sidebar'?'弹出为独立窗口':'收起为 Excel 侧边栏';b.setAttribute('aria-label',b.title);
+      b.title=mode==='sidebar'?'弹出为独立窗口':'收起为 Excel 侧边栏';b.setAttribute('aria-label',b.title);b.disabled=busy;b.setAttribute('aria-busy',String(busy));
       b.innerHTML=mode==='sidebar'?'<svg viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M10 5H5v14h14v-5"/></svg>':'<svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M14 5v14M7 12h4m-2-2 2 2-2 2"/></svg>';
     }
   }
@@ -106,10 +110,13 @@
     const p=progress||{};box.firstChild.textContent=(p.phase||'正在读取 Excel')+(p.current?' · '+p.current.toLocaleString()+' 格':'');
     const meter=box.querySelector('progress');meter.max=100;if(p.percent>0)meter.value=p.percent;else meter.removeAttribute('value');bar.hidden=false;
   }
-  window.addEventListener('hashchange',()=>{checkpoint.automatic=false;request('aiApproval',{enabled:false}).then(v=>{checkpoint=v;render();}).catch(()=>{});render();});
+  window.addEventListener('hashchange',()=>{closeMenu();request('aiConversation').then(v=>{checkpoint=v;render();}).catch(()=>{});render();});
   window.addEventListener('DOMContentLoaded',()=>{
     if(mode==='sidebar')window.dispatchEvent(new Event('gridpilot:sidebar'));
     document.documentElement.dataset.gpMode=mode;
+    document.addEventListener('pointerdown',e=>{if(!toolbar?.querySelector('.gp-menu')?.contains(e.target))closeMenu();},true);
+    document.addEventListener('focusin',e=>{if(!toolbar?.querySelector('.gp-menu')?.contains(e.target))closeMenu();},true);
+    document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeMenu();toolbar?.querySelector('.gp-menu>summary')?.focus();}},true);
     request('aiCheckpoint').then(v=>{checkpoint=v;render();}).catch(()=>{});
     const style=el('style');style.textContent=`
 
@@ -129,7 +136,8 @@ html[data-gp-mode="sidebar"] .controls.self-start{display:none!important}
       #gridpilot-excel{font:12px/1.5 system-ui;color:inherit;border-top:1px solid #899b9826;margin-top:4px;padding:5px 0;overflow-wrap:anywhere}
       #gridpilot-excel[hidden]{display:none}#gridpilot-excel .gp-row{display:flex;gap:8px;align-items:start;justify-content:space-between}#gridpilot-excel .gp-row>details{flex:1;min-width:0}
       #gridpilot-excel button,.gp-popup button{font:inherit;color:inherit;background:transparent;border:0;border-radius:6px;padding:4px 8px;cursor:pointer}#gridpilot-excel button:hover,.gp-popup button:hover{background:#899b9820}
-      #gridpilot-excel .gp-primary{background:#237e68;color:#fff;white-space:nowrap}#gridpilot-excel button:disabled{opacity:.5}
+      #gridpilot-excel button.gp-primary{background:#237e68!important;color:#fff!important;font-weight:600;min-height:32px;white-space:normal}#gridpilot-excel button.gp-primary:hover{background:#19634f!important}#gridpilot-excel button.gp-primary:disabled{background:#496e64!important;color:#fff!important;opacity:1;cursor:progress}#gridpilot-excel button:disabled{opacity:.5}
+      .gp-actions{display:flex;gap:5px;align-items:center;flex-shrink:0;max-width:60%}.gp-popup>select{max-width:none!important;width:100%;padding:8px!important;background:#20866d10!important}.gp-feedback{padding:6px 8px;border-radius:7px;margin-top:5px;opacity:1!important}.gp-feedback.gp-error{color:#a43932;background:#cc44330c}.gp-feedback.gp-working{color:#365e53;background:#20866d10}.gp-feedback.gp-success{color:#237e68;background:#20866d09}
       #gridpilot-excel summary{cursor:pointer;padding:3px}#gridpilot-excel .gp-results{max-height:180px;overflow:auto}#gridpilot-excel .gp-result{border-top:1px solid #899b9820;padding:8px 2px}
       #gridpilot-excel code{display:block;white-space:pre-wrap;font-size:11px;max-height:90px;overflow:auto}#gridpilot-excel small{display:block;opacity:.65}.gp-feedback{opacity:.75;font-size:11px}
     `;document.head.append(style);

@@ -1,5 +1,7 @@
 # 文档目录
 
+- [v1.9.1 交互修复发布说明](releases/RELEASE-v1.9.1.md)、[验证与恢复边界](v1.9.1/VALIDATION.md)
+
 - [v1.9 发布说明](releases/RELEASE-v1.9.0.md)、[设计与恢复边界](v1.9/DESIGN.md)、[验证记录](v1.9/VALIDATION.md)
 
 - [v1.7 AI 助手发布说明](releases/RELEASE-v1.7.0.md)、[交互调研与设计](v1.7/DESIGN.md)、[验证记录](v1.7/VALIDATION.md)
