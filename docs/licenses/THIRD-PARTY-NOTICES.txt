@@ -33,3 +33,15 @@ Unicode Unihan 17.0.0 (kMandarin)
 Fixed pinyin initials data embedded in SheetPilot.Core.dll.
 Source: https://www.unicode.org/Public/17.0.0/ucd/Unihan.zip
 Distributed under Unicode License v3; see UNICODE-LICENSE.txt or Settings > About.
+
+v1.8 Excel AI MCP
+Official TypeScript MCP SDK 1.32.1 (MIT), @modelcontextprotocol/sdk.
+https://github.com/modelcontextprotocol/typescript-sdk
+See MCP-SDK-LICENSE.txt; dependencies retain their package notices in Chatbox/node_modules.
+
+Excel MCP Server by Haris Musa (MIT).
+https://github.com/haris-musa/excel-mcp-server
+Commit 41c484b6930df70d7e783be6eaa170c6e484e7a0.
+AiRange.cs adapts bounded A1 reference parsing and hex-color validation from
+refs.py / formatting.py. Native Excel operations use GridPilot's COM adapter.
+See EXCEL-MCP-LICENSE.txt. The full upstream Python server is not bundled.

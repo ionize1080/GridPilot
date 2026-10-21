@@ -12,7 +12,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 namespace SheetPilot.Excel
 {
-    // Per-window named pipe restricted to current Windows user. No TCP or cell data on disk.
+    // Per-window named pipe restricted to current Windows user. No TCP transport.
     internal sealed class PortableWindow : IDisposable
     {
         private readonly Process process;
@@ -24,6 +24,7 @@ namespace SheetPilot.Excel
         private int lastProgressTick;
         private readonly SemaphoreSlim sending=new SemaphoreSlim(1,1);
         public bool IsDisconnected=>disposed || disconnected;
+        public void SetAiMode(bool sidebar) => Send(new { type = "mode", mode = sidebar ? "sidebar" : "window" });
         public void Activate() => Send(new { type = "activate" });
         public event Action Disconnected;
         private void Disconnect(){lock(gate){if(disconnected)return;disconnected=true;}Disconnected?.Invoke();CancelRequested?.Invoke();}

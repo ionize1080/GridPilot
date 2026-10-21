@@ -55,8 +55,9 @@ namespace SheetPilot.Core
         [DataMember] public bool SortContextMenu { get; set; } = true;
         [DataMember] public SortOptions Sort { get; set; } = new SortOptions();
         [DataMember] public MultiSortOptions MultiSort { get; set; } = new MultiSortOptions();
-        public bool IsEnabled(string id) => id == "GridPilot_AI" || id == "GridPilot_Settings" || id == "GridPilot_Focus" || id.StartsWith("SheetPilot_", StringComparison.Ordinal) || Array.IndexOf(EnabledFeatures ?? new string[0], id) >= 0;
+        public bool IsEnabled(string id) => id == "GridPilot_AI" && AiEnabled || id == "GridPilot_Settings" || id == "GridPilot_Focus" || id.StartsWith("SheetPilot_", StringComparison.Ordinal) || Array.IndexOf(EnabledFeatures ?? new string[0], id) >= 0;
         [DataMember] public int IconTheme { get; set; }
+        [DataMember] public bool AiEnabled { get; set; } = true;
         [DataMember] public int AiDisplayMode { get; set; }
         [DataMember] public bool MaskReplaceMentions { get; set; } = true;
         [DataMember] public bool MaskPreserveFormatting { get; set; } = true;
@@ -71,7 +72,7 @@ namespace SheetPilot.Core
         [DataMember] public int ConversionLimit { get; set; } = 50000;
         [DataMember] public int DecimalCulture { get; set; }
         [OnDeserializing] private void Initialize(StreamingContext c)
-        { EnabledFeatures=DefaultFeatures(); SortContextMenu=true; Sort=new SortOptions(); FocusRipple = MaskPreserveFormatting = MaskReplaceMentions = true; RippleDuration=280; RippleWidth=36; RippleStrength=24; SchemaVersion = 1; Rename = new RenameOptions(); FocusColor = "#42AD91"; FocusOpacity = 20; FocusInterval = 33; PreserveVisualAlignment = FocusRow = FocusColumn = ClearActiveCell = PreserveLeadingZeros = ProtectPrecision = TrimNumericText = AllowThousands = NumberAsTextHint = true; ConversionLimit = 50000; }
+        { AiEnabled=true; EnabledFeatures=DefaultFeatures(); SortContextMenu=true; Sort=new SortOptions(); FocusRipple = MaskPreserveFormatting = MaskReplaceMentions = true; RippleDuration=280; RippleWidth=36; RippleStrength=24; SchemaVersion = 1; Rename = new RenameOptions(); FocusColor = "#42AD91"; FocusOpacity = 20; FocusInterval = 33; PreserveVisualAlignment = FocusRow = FocusColumn = ClearActiveCell = PreserveLeadingZeros = ProtectPrecision = TrimNumericText = AllowThousands = NumberAsTextHint = true; ConversionLimit = 50000; }
         public void Normalize()
         {
             AiDisplayMode = AiDisplayMode == 1 ? 1 : 0;

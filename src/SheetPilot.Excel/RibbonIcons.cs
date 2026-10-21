@@ -30,7 +30,19 @@ namespace SheetPilot.Excel
             using (var faint = new SolidBrush(theme==1?Color.FromArgb(211,223,249):theme==2?Color.FromArgb(216,222,228):Color.FromArgb(201,234,224)))
             {
                 g.Clear(Color.Transparent); g.SmoothingMode = SmoothingMode.AntiAlias; g.PixelOffsetMode = PixelOffsetMode.HighQuality; g.ScaleTransform(size*4 / 32f, size*4 / 32f);
-                if (id == "GridPilot_AI") { g.FillRectangle(faint, 3, 5, 24, 19); g.DrawRectangle(pen, 3, 5, 24, 19); g.DrawLines(pen,new[]{new Point(8,24),new Point(8,29),new Point(15,24)});g.FillPolygon(accent,new[]{new Point(17,7),new Point(19,12),new Point(24,14),new Point(19,16),new Point(17,21),new Point(15,16),new Point(10,14),new Point(15,12)}); }
+                if (id == "GridPilot_AI")
+                {
+                    // Open grid + a four-point spark; shared palette, legible at Ribbon size.
+                    using(var outline=new GraphicsPath())
+                    {
+                        outline.AddArc(3,7,6,6,180,90);outline.AddLine(6,7,17,7);outline.AddLine(17,7,17,11);
+                        outline.AddLine(17,11,25,11);outline.AddLine(25,11,25,25);outline.AddArc(19,22,6,6,0,90);
+                        outline.AddLine(22,28,6,28);outline.AddArc(3,22,6,6,90,90);outline.CloseFigure();
+                        g.FillPath(faint,outline);g.DrawPath(pen,outline);
+                    }
+                    g.DrawLine(pen,4,17,24,17);g.DrawLine(pen,11,8,11,27);g.DrawLine(pen,4,22,24,22);
+                    g.FillPolygon(accent,new[]{new Point(24,1),new Point(26,6),new Point(31,8),new Point(26,10),new Point(24,15),new Point(22,10),new Point(17,8),new Point(22,6)});
+                }
                 else if (id.Contains("Refresh")) { g.DrawArc(pen, 5, 5, 22, 22, 40, 285); g.FillPolygon(accent, new[] { new Point(24, 3), new Point(29, 11), new Point(20, 11) }); }
                 else if (id.Contains("Focus")) { g.FillRectangle(faint, 2, 12, 28, 8); g.FillRectangle(faint, 12, 2, 8, 28); g.DrawRectangle(pen, 3, 3, 26, 26); g.DrawLine(pen, 3, 12, 29, 12); g.DrawLine(pen, 3, 20, 29, 20); g.DrawLine(pen, 12, 3, 12, 29); g.DrawLine(pen, 20, 3, 20, 29); g.FillRectangle(accent, 13, 13, 6, 6); }
                 else if (id.Contains("Rename")) { g.DrawRectangle(pen, 4, 3, 20, 25); g.DrawLine(pen, 8, 9, 19, 9); g.DrawLine(pen, 8, 14, 16, 14); g.FillPolygon(accent, new[] { new Point(13, 25), new Point(15, 19), new Point(25, 9), new Point(29, 13), new Point(19, 23) }); }

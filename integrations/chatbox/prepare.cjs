@@ -33,14 +33,19 @@ patch('dist/renderer/js/InputBox.DH3jG147.js',
 patch('dist/renderer/js/index.TlLbGKvw.js',
   'maxContextMessageCount:nu.maxContextMessageCount});const yu=[];',
   'maxContextMessageCount:nu.maxContextMessageCount});ku=window.gridpilotExcel.expandMessages(ku);const yu=[];');
+patch('dist/renderer/js/InputBox.DH3jG147.js',
+  'rr.knowledgeBase&&!M&&o.jsx(Bo,{currentKnowledgeBaseId:de?.id,onSelect:nn,',
+  'o.jsx("span",{id:"gridpilot-toolbar-slot"}),rr.knowledgeBase&&!M&&o.jsx(Bo,{currentKnowledgeBaseId:de?.id,onSelect:nn,');
 const renderer=path.join(native,'dist/renderer/js/index.TlLbGKvw.js');
 const rendererBefore=hash(renderer);
-fs.appendFileSync(renderer,'\nwindow.addEventListener("gridpilot:sidebar",()=>uiStore.getState().setShowSidebar(false));\n');
-patches.push({file:'dist/renderer/js/index.TlLbGKvw.js',originalSha256:rendererBefore,patchedSha256:hash(renderer),append:'Collapse the native conversation drawer once when entering the Excel sidebar; its original toggle stays available.'});
+fs.appendFileSync(renderer,'\nObject.defineProperty(window.File.prototype,"path",{configurable:true,get(){return window.gridpilotExcel.filePath(this);}});\nwindow.addEventListener("gridpilot:sidebar",()=>uiStore.getState().setShowSidebar(false));\n');
+patches.push({file:'dist/renderer/js/index.TlLbGKvw.js',originalSha256:rendererBefore,patchedSha256:hash(renderer),append:'Restore File.path through Electron webUtils for native attachment parsing. Collapse the native conversation drawer once when entering the Excel sidebar; its original toggle stays available.'});
 const preload=path.join(native,'dist/preload/index.js'),original=hash(preload);
 fs.appendFileSync(preload,'\n'+fs.readFileSync(path.join(__dirname,'preload.cjs'),'utf8'));
 patches.push({file:'dist/preload/index.js',originalSha256:original,patchedSha256:hash(preload),append:'integrations/chatbox/preload.cjs'});
-for(const name of ['bootstrap.cjs','tools.cjs','LICENSE-GPL-3.0.txt'])fs.copyFileSync(path.join(__dirname,name),path.join(out,name));
-fs.writeFileSync(path.join(out,'package.json'),JSON.stringify({name:'gridpilot-chatbox',version:'1.20.3',private:true,main:'bootstrap.cjs'}));
+for(const name of ['bootstrap.cjs','tools.cjs','stdio.cjs','LICENSE-GPL-3.0.txt'])fs.copyFileSync(path.join(__dirname,name),path.join(out,name));
+fs.cpSync(path.join(__dirname,'node_modules'),path.join(out,'node_modules'),{recursive:true});
+fs.cpSync(path.join(extracted,'resources/app.asar.unpacked'),path.join(out,'resources/app.asar.unpacked'),{recursive:true});
+fs.writeFileSync(path.join(out,'package.json'),JSON.stringify({name:packageData.name,productName:packageData.productName,version:'1.20.3',private:true,main:'bootstrap.cjs'}));
 fs.writeFileSync(path.join(out,'provenance.json'),JSON.stringify({version:'1.20.3',upstream:'https://github.com/chatboxai/chatbox/releases/tag/v1.20.3',installerSha256:expected,archiveSha256:hash(archive),patches},null,2));
-console.log('Prepared official Chatbox 1.20.3 with five auditable integration patches:',out);
+console.log('Prepared official Chatbox 1.20.3 with auditable integration patches:',out);

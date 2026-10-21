@@ -2,14 +2,16 @@
 const {_electron:electron}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
 const fs=require('node:fs'),path=require('node:path'),net=require('node:net'),crypto=require('node:crypto'),assert=require('node:assert/strict');
 const http=require('node:http');
+const {Client}=require('../integrations/chatbox/node_modules/@modelcontextprotocol/sdk/dist/cjs/client/index.js');
+const {StdioClientTransport}=require('../integrations/chatbox/node_modules/@modelcontextprotocol/sdk/dist/cjs/client/stdio.js');
 const root=path.resolve(__dirname,'..'),profile=fs.mkdtempSync(path.join(root,'.temp/ai-ui-'));
 const pipe='GridPilot-'+crypto.randomBytes(16).toString('hex'),snapshotId='a'.repeat(32);
-let application,socket,applied=0,captured=0;
-const modelRequests=[];
+let application,socket,mcpClient,applied=0,captured=0;
+const modelRequests=[],modelHeaders=[];
 const modelServer=http.createServer((req,res)=>{
   let text='';req.on('data',d=>text+=d);req.on('end',()=>{
     if(req.method==='GET'){res.setHeader('Content-Type','application/json');res.end(JSON.stringify({object:'list',data:[{id:'gpt-4o',object:'model'}]}));return;}
-    const body=JSON.parse(text);modelRequests.push(body);
+    const body=JSON.parse(text);modelRequests.push(body);modelHeaders.push(req.headers);
     const name=body.tools?.find(t=>t.function.name.endsWith('excel_statistics'))?.function.name;
     const hasResult=body.messages.some(m=>m.role==='tool');
     res.writeHead(200,{'Content-Type':'text/event-stream'});
@@ -26,7 +28,8 @@ function respond(m){
   if(m.action==='aiContext')return {available:true,book:'合成销售.xlsx',sheet:'销售',selection:'A1:C4'};
   if(m.action==='aiCapture'){captured++;return {...capture,scope:m.scope};}
   if(m.action==='aiPropose')return {proposalId:'test-proposal',snapshotId,book:'合成销售.xlsx',sheet:'销售',address:m.address,formula:m.formula,before:null};
-  if(m.action==='aiApply'){applied++;return {message:'已写入销售!D2'};}
+  if(m.action==='aiApplyBatch'){applied++;return {message:'已应用整批修改',appliedIds:m.proposalIds};}
+  if(m.action==='aiMode')return {mode:m.mode};
   if(m.action==='aiUndo')return {message:'已撤销AI公式'};
   if(m.action==='aiNavigate')return {located:true};
   if(m.action==='aiRead')return m.operation==='statistics'?{snapshotId,statistics:{sum:60,numericCount:3,average:20,min:10,max:30}}:{snapshotId,total:1,cells:[{sheet:'销售',address:'B2',value:10}]};
@@ -57,14 +60,17 @@ const server=net.createServer(s=>{
     });
     console.log('Preload:',await page.evaluate(()=>({native:!!window.electronAPI,excel:!!window.gridpilotExcel})));
     await page.getByText('Just chat',{exact:true}).click();
-    await page.locator('#gridpilot-excel').waitFor({timeout:30000}).catch(async e=>{
+    await page.locator('#gridpilot-excel-tools').waitFor({timeout:30000}).catch(async e=>{
       console.log('UI diagnostic:',await page.locator('body').innerText());console.log('errors',errors);
       await page.screenshot({path:path.join(root,'.temp/ai-ui-failure.png')});throw e;
     });
     console.log('Native Chatbox ready',await page.locator('body').innerText().then(s=>s.slice(0,1200)));
-    console.log('Toolbar buttons',await page.locator('#gridpilot-excel button').allTextContents());
+    assert.equal(await page.locator('#gridpilot-excel').isVisible(),false,'idle integration uses no extra panel');
+    assert(await page.locator('#gridpilot-toolbar-slot #gridpilot-excel-tools').count());
     await page.screenshot({path:path.join(root,'.temp/ai-ui-inspect.png')});
-    await page.locator('#gridpilot-excel button').filter({hasText:'解释公式'}).click();
+    await page.getByLabel('Excel工具',{exact:true}).click();
+
+    await page.locator('#gridpilot-excel-tools button').filter({hasText:'解释公式'}).click();
     assert.match(await page.locator('#message-input').inputValue(),/解释选中/);
     await page.getByLabel('Excel上下文范围').selectOption('workbook');
     const message=await page.evaluate(()=>window.gridpilotExcel.captureMessage({id:'test-context',role:'user',contentParts:[{type:'text',text:'统计数据'}]}));
@@ -76,19 +82,18 @@ const server=net.createServer(s=>{
     assert.equal(plain.contentParts.length,1);assert.equal(captured,1);
     const config=await page.evaluate(()=>window.electronAPI.invoke('getStoreValue','settings'));
     const bridge=config.mcp.servers.find(s=>s.id==='gridpilot-excel');assert(bridge);assert.equal(config.autoUpdate,false);
-    const rpc=async(method,params={})=>{
-      const response=await fetch(bridge.transport.url,{method:'POST',headers:{...bridge.transport.headers,'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method,params})});return response.json();
-    };
-    assert((await rpc('initialize',{protocolVersion:'2024-11-05'})).result.capabilities.tools);
-    const list=await rpc('tools/list');assert.equal(list.result.tools.length,4);assert(!list.result.tools.some(t=>/apply|undo/.test(t.name)));
-    assert.equal((await fetch(bridge.transport.url,{method:'POST'})).status,401);
+    assert.equal(bridge.transport.type,'stdio');assert(!JSON.stringify(bridge).includes('http://'));
+    mcpClient=new Client({name:'GridPilot-test',version:'1.0.0'});
+    await mcpClient.connect(new StdioClientTransport({...bridge.transport,stderr:'pipe'}));
+    const rpc=async(method,params={})=>({result:method==='tools/list'?await mcpClient.listTools():await mcpClient.callTool(params)});
+    const list=await rpc('tools/list');assert.equal(list.result.tools.length,9);assert(!list.result.tools.some(t=>/apply|undo/.test(t.name)));
     const proposed=await rpc('tools/call',{name:'excel_propose_formula',arguments:{snapshotId,sheet:'销售',address:'D2',formula:'=SUM(B2:B4)'}});
     assert(!proposed.result.isError);assert.equal(applied,0);
     await page.locator('#gridpilot-excel').getByText('=SUM(B2:B4)',{exact:true}).waitFor({state:'attached'});
     console.log('Proposal DOM:',await page.locator('#gridpilot-excel').evaluate(e=>({text:e.textContent,details:[...e.querySelectorAll('details')].map(d=>d.open)})));
     await page.screenshot({path:path.join(root,'.temp/ai-proposal-inspect.png')});
-    await page.locator('#gridpilot-excel button').filter({hasText:'应用公式'}).click();assert.equal(applied,1);
-    await page.locator('#gridpilot-excel button').filter({hasText:'撤销AI公式'}).click();
+    await page.locator('#gridpilot-excel button').filter({hasText:'一键应用'}).click();assert.equal(applied,1);
+    await page.getByLabel('Excel工具',{exact:true}).click();await page.locator('#gridpilot-excel-tools button').filter({hasText:'撤销上次应用'}).click();await page.getByLabel('Excel工具',{exact:true}).click();
     await page.getByLabel('Excel上下文范围').selectOption('selection');
     await page.getByText('选择模型',{exact:true}).click();
     console.log('Model menu:',(await page.locator('body').innerText()).slice(-1800));
@@ -98,11 +103,34 @@ const server=net.createServer(s=>{
     await page.getByText('完整选区统计：合计为 60，来源 销售!B2:B4。',{exact:false}).first().waitFor();
     assert(modelRequests.some(r=>JSON.stringify(r.messages).includes(snapshotId)));
     assert(modelRequests.some(r=>r.messages.some(m=>m.role==='tool')),'native model tool loop returned full statistics');
-    fs.mkdirSync(path.join(root,'docs/v1.7'),{recursive:true});
-    await page.screenshot({animations:'disabled',path:path.join(root,'docs/v1.7/chatbox-window.png')});
+    assert(modelHeaders.every(h=>h.authorization==='Bearer synthetic-test-only'));assert(modelHeaders.every(h=>!/gridpilot/i.test(h['user-agent']||'')));
+    assert.equal(await application.evaluate(({app})=>app.getVersion()),'1.20.3');
+    console.log('Native provider header names',Object.keys(modelHeaders[0]).sort());
+    // Test the native parser plus the same File.path compatibility used by pick/drop.
+    for(const ext of ['txt','pdf','docx']){
+      const fixture=path.join(root,'tests/fixtures/ai/中文附件.'+ext);
+      const parsed=await page.evaluate(async filePath=>JSON.parse(await window.electronAPI.invoke('parseFileLocally',JSON.stringify({filePath}))),fixture);
+      assert(parsed.isSupported,ext+' native parser supports attachment');assert.match(parsed.text,/GridPilot/);
+    }
+    const upload=page.locator('#input-box-2024-02-22 input[type=file]').last();
+    const pdf=path.join(root,'tests/fixtures/ai/中文附件.pdf');
+    await page.evaluate(()=>document.addEventListener('change',e=>{if(e.target.files?.length)window.__fixturePath=e.target.files[0].path;},{capture:true,once:true}));
+    await upload.setInputFiles(pdf);
+    const actualPath=await page.evaluate(()=>window.__fixturePath);assert.equal(actualPath,pdf,'native File.path bridge preserves picker path');
+    await page.getByText('中文附件.pdf',{exact:false}).first().waitFor();
+    await page.getByLabel('Excel上下文范围').selectOption('none');
+    await page.locator('#message-input').fill('读取已添加的 PDF 附件。');
+    // Native parsing completes before its send control enables.
+    await page.locator('#message-input').press('Enter');
+    await page.waitForFunction(()=>!document.querySelector('#message-input').value,{timeout:30000});
+    await page.waitForTimeout(300);
+    assert(modelRequests.some(r=>JSON.stringify(r.messages).includes('GridPilot PDF attachment verification')),'native model receives parsed PDF text');
+    console.log('PASS native TXT/PDF/DOCX parsing, Unicode picker path, PDF message through Chatbox provider');
+    fs.mkdirSync(path.join(root,'docs/v1.8'),{recursive:true});
+    await page.screenshot({animations:'disabled',path:path.join(root,'docs/v1.8/chatbox-window.png')});
     await application.evaluate(({BrowserWindow})=>{const w=BrowserWindow.getAllWindows()[0];w.setSize(480,850);w.webContents.send('gridpilot:mode','sidebar');});
     await page.waitForFunction(()=>document.getElementById('gridpilot-excel')?.dataset.mode==='sidebar');
-    await page.screenshot({animations:'disabled',path:path.join(root,'docs/v1.7/chatbox-narrow.png')});
+    await page.screenshot({animations:'disabled',path:path.join(root,'docs/v1.8/chatbox-narrow.png')});
     const overflow=await page.locator('#gridpilot-excel').evaluate(e=>e.scrollWidth>e.clientWidth+2);assert.equal(overflow,false);
     await application.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].setSize(1100,850));
     await application.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].webContents.send('navigate-to','/settings/provider'));
@@ -110,8 +138,8 @@ const server=net.createServer(s=>{
     await page.getByText('API 密钥',{exact:true}).waitFor();
     await page.waitForTimeout(400); // Native modal transition, before the documentation screenshot.
     console.log('Native settings:',(await page.locator('body').innerText()).slice(-1500));
-    await page.screenshot({animations:'disabled',path:path.join(root,'docs/v1.7/chatbox-settings.png')});
+    await page.screenshot({animations:'disabled',path:path.join(root,'docs/v1.8/chatbox-settings.png')});
     assert.deepEqual(errors,[]);
-    console.log('PASS official native UI, Chinese draft, context opt-out, full-scope MCP, authenticated transport, proposal/apply/undo, narrow layout');
-  }finally{if(application)await application.close();socket?.destroy();server.close();modelServer.close();}
+    console.log('PASS official native UI, Chinese draft, context opt-out, full-scope MCP, stdio transport, proposal/apply/undo, narrow layout');
+  }finally{if(mcpClient)await mcpClient.close();if(application)await application.close();socket?.destroy();server.close();modelServer.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

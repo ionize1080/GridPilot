@@ -12,22 +12,51 @@ namespace SheetPilot.Excel
     [ComVisible(true), Guid("62A071C0-F294-45D6-83BD-97A2244406E1"), ProgId("GridPilot.AiPane")]
     public sealed class AiPane : UserControl
     {
-        private IntPtr child;
-        [DllImport("user32.dll", SetLastError=true)] private static extern IntPtr SetParent(IntPtr window, IntPtr parent);
-        [DllImport("user32.dll")] private static extern int GetWindowLong(IntPtr window, int index);
-        [DllImport("user32.dll")] private static extern int SetWindowLong(IntPtr window, int index, int value);
-        [DllImport("user32.dll")] private static extern bool MoveWindow(IntPtr window, int x, int y, int width, int height, bool repaint);
-        public AiPane() { AutoScaleMode = AutoScaleMode.Dpi; BackColor = System.Drawing.Color.White; }
+        private IntPtr child,owner;
+        private int originalStyle;
+        private readonly Timer tracking=new Timer{Interval=120};
+        private System.Drawing.Rectangle lastBounds;
+        [DllImport("user32.dll")] private static extern int GetWindowLong(IntPtr window,int index);
+        [DllImport("user32.dll")] private static extern int SetWindowLong(IntPtr window,int index,int value);
+        [DllImport("user32.dll",EntryPoint="SetWindowLongPtrW")] private static extern IntPtr SetWindowLongPtr(IntPtr window,int index,IntPtr value);
+        [DllImport("user32.dll")] private static extern bool SetWindowPos(IntPtr window,IntPtr after,int x,int y,int width,int height,uint flags);
+        [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr window);
+        [DllImport("user32.dll")] private static extern bool IsIconic(IntPtr window);
+        [DllImport("user32.dll")] private static extern bool ShowWindow(IntPtr window,int command);
+        [DllImport("user32.dll")] private static extern IntPtr GetAncestor(IntPtr window,uint flags);
+        private static void Owner(IntPtr window,IntPtr owner){if(IntPtr.Size==8)SetWindowLongPtr(window,-8,owner);else SetWindowLong(window,-8,owner.ToInt32());}
+        public AiPane()
+        {
+            AutoScaleMode=AutoScaleMode.Dpi;BackColor=System.Drawing.Color.White;
+            tracking.Tick+=(s,e)=>Fit();
+        }
         internal void Attach(IntPtr window)
         {
-            child = window;
-            int style = GetWindowLong(child, -16);
-            SetWindowLong(child, -16, (style & ~unchecked((int)0x80000000) & ~0x00C00000) | 0x40000000);
-            SetParent(child, Handle);
-            Fit();
+            child=window;originalStyle=GetWindowLong(child,-16);
+            // Keep Chromium as an owned top-level HWND. SetParent/WS_CHILD lets
+            // Excel's accelerator loop consume text before Chromium receives it.
+            owner=GetAncestor(Handle,2);Owner(child,owner);
+            SetWindowLong(child,-16,(originalStyle & ~0x00C40000 & ~0x40000000)|unchecked((int)0x80000000));
+            lastBounds=System.Drawing.Rectangle.Empty;Fit();tracking.Start();
         }
-        private void Fit() { if (child != IntPtr.Zero) MoveWindow(child, 0, 0, ClientSize.Width, ClientSize.Height, true); }
-        protected override void OnResize(EventArgs e) { base.OnResize(e); Fit(); }
+        internal void Detach()
+        {
+            tracking.Stop();if(child==IntPtr.Zero)return;
+            Owner(child,IntPtr.Zero);SetWindowLong(child,-16,originalStyle);
+            SetWindowPos(child,IntPtr.Zero,120,100,1000,800,0x34);ShowWindow(child,4);child=IntPtr.Zero;
+        }
+        private void Fit()
+        {
+            if(child==IntPtr.Zero||!IsHandleCreated)return;
+            if(!Visible||!IsWindowVisible(Handle)||IsIconic(owner)){ShowWindow(child,0);return;}
+            var bounds=RectangleToScreen(ClientRectangle);
+            if(bounds.Width<20||bounds.Height<20){ShowWindow(child,0);return;}
+            if(bounds!=lastBounds){SetWindowPos(child,IntPtr.Zero,bounds.X,bounds.Y,bounds.Width,bounds.Height,0x34);lastBounds=bounds;}
+            ShowWindow(child,4);
+        }
+        protected override void OnResize(EventArgs e){base.OnResize(e);Fit();}
+        protected override void OnVisibleChanged(EventArgs e){base.OnVisibleChanged(e);Fit();}
+        protected override void Dispose(bool disposing){if(disposing){Detach();tracking.Dispose();}base.Dispose(disposing);}
     }
     public sealed partial class ToolsModule
     {
@@ -35,6 +64,28 @@ namespace SheetPilot.Excel
         private AiOperations ai;
         private CustomTaskPane aiPane;
         private AiPane aiControl;
+        private IntPtr aiHandle;
+        private void ApplyAiSettings()
+        {
+            if(!settings.AiEnabled){CloseAi();return;}
+            if(aiWindow==null || aiHandle==IntPtr.Zero)return;
+            SetAiMode(settings.AiDisplayMode==0);
+        }
+        private void SetAiMode(bool sidebar)
+        {
+            if(sidebar && aiPane==null)
+            {
+                aiControl=new AiPane();aiPane=CustomTaskPaneFactory.CreateCustomTaskPane(aiControl,"GridPilot AI");
+                aiPane.DockPosition=MsoCTPDockPosition.msoCTPDockPositionRight;
+                using(var g=aiControl.CreateGraphics())aiPane.Width=(int)(440*g.DpiX/96.0);
+                aiPane.Visible=true;aiControl.Attach(aiHandle);
+            }
+            else if(!sidebar && aiPane!=null)
+            {
+                aiControl.Detach();aiPane.Delete();aiPane=null;aiControl.Dispose();aiControl=null;
+            }
+            aiWindow?.SetAiMode(sidebar);
+        }
         private System.Threading.Mutex aiProfileLock;
         private void OpenAi()
         {
@@ -56,14 +107,6 @@ namespace SheetPilot.Excel
             bool sidebar = settings.AiDisplayMode == 0;
             try
             {
-                if (sidebar)
-                {
-                    aiControl = new AiPane();
-                    aiPane = CustomTaskPaneFactory.CreateCustomTaskPane(aiControl, "GridPilot AI · Chatbox 1.20.3");
-                    aiPane.DockPosition = MsoCTPDockPosition.msoCTPDockPositionRight;
-                    using (var graphics = aiControl.CreateGraphics()) aiPane.Width = (int)(480 * graphics.DpiX / 96.0);
-                    aiPane.Visible = true;
-                }
                 aiWindow = new PortableWindow(directory, message =>
                 {
                     string action = (string)message["action"];
@@ -71,10 +114,16 @@ namespace SheetPilot.Excel
                     switch (action)
                     {
                         case "aiReady":
-                            if (sidebar) aiControl.Attach(new IntPtr(long.Parse((string)message["handle"])));
-                            result = new { mode = sidebar ? "sidebar" : "window", version = "1.20.3" }; break;
+                            aiHandle=new IntPtr(long.Parse((string)message["handle"]));
+                            SetAiMode(settings.AiDisplayMode==0);
+                            result = new { mode = settings.AiDisplayMode==0 ? "sidebar" : "window", version = "1.20.3" }; break;
+                        case "aiMode":
+                            settings.AiDisplayMode=(string)message["mode"]=="sidebar"?0:1;store.Save(settings);SetAiMode(settings.AiDisplayMode==0);
+                            result=new {mode=settings.AiDisplayMode==0?"sidebar":"window",message="已切换工作方式"};break;
+                        case "aiApplyBatch": result=ai.ApplyBatch(message["proposalIds"]?.ToObject<string[]>());break;
                         case "aiContext": result = ai.Context(); break;
                         case "aiCapture": result = ai.Capture((string)message["scope"]); break;
+                        case "aiInspect": result=ai.Metadata((string)message["snapshotId"]);break;
                         case "aiRead": result = ai.Read(message); break;
                         case "aiPropose": result = ai.Propose(message); break;
                         case "aiApply": result = ai.Apply((string)message["proposalId"]); break;
@@ -93,6 +142,7 @@ namespace SheetPilot.Excel
         {
             if (aiWindow != null) { aiWindow.Closed -= CloseAi; portableWindows.Remove(aiWindow); aiWindow.Dispose(); aiWindow = null; }
             ai?.Dispose(); ai = null;
+            aiHandle=IntPtr.Zero;
             if (aiPane != null) { try { aiPane.Delete(); } catch { } aiPane = null; }
             aiControl?.Dispose(); aiControl = null;
             if (aiProfileLock != null) { aiProfileLock.ReleaseMutex(); aiProfileLock.Dispose(); aiProfileLock = null; }

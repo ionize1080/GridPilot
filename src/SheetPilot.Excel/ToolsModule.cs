@@ -202,7 +202,7 @@ namespace SheetPilot.Excel
                 if(action=="saveSettings")
                 {
                     var candidate=message["settings"].ToObject<ToolPreferences>();candidate.Normalize();
-                    JsonConvert.PopulateObject(JsonConvert.SerializeObject(candidate),settings);bool saved=store.Save(settings);Ribbon.Refresh();
+                    JsonConvert.PopulateObject(JsonConvert.SerializeObject(candidate),settings);bool saved=store.Save(settings);ApplyAiSettings();Ribbon.Refresh();
                     return Task.FromResult<object>(new {message=store.Status,saved,settings});
                 }
                 if(action=="navigationSettings"){navigation.ShowSettings();return Task.FromResult<object>(new {message="已打开导航布局设置。"});}

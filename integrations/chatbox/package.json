@@ -1,1 +1,1 @@
-{"name":"gridpilot-chatbox-build","version":"1.7.0","private":true,"dependencies":{"@electron/asar":"3.4.1","7zip-bin":"5.2.0"}}
+{"name":"gridpilot-chatbox-build","version":"1.8.0","private":true,"dependencies":{"@electron/asar":"3.4.1","@modelcontextprotocol/sdk":"1.32.1","7zip-bin":"5.2.0"}}
