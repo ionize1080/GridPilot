@@ -1,55 +1,7 @@
-v1.0：global.json固定已验证的.NET SDK 8.0.206（允许同系列补丁）。
-新增 --v1 与 --v1 --excel --large；tests/browser-v1.cjs 检查连续保存、前后缀同步、取消保存及进度。
-build.ps1已强制运行--upgrade与--v1。
+GridPilot v1.9.1 — 文档入口
 
-构建 GridPilot
-===============
+本指南已整理为图文版 Markdown，请打开同目录 BUILD.md。
+在线阅读：https://github.com/ionize1080/GridPilot/blob/main/docs/development/BUILD.md
+文档总览：https://github.com/ionize1080/GridPilot/blob/main/docs/README.md
 
-开发机：Windows，.NET SDK 8 或 9（含桌面构建支持）。无需安装 Excel 即可编译和跑基础测试。
-项目通过 Microsoft.NETFramework.ReferenceAssemblies 1.0.3 获取 net462 编译引用。
-不要把开发用 SDK 需求和最终用户的运行条件混淆。
-
-从源码根目录运行：
-  powershell -NoProfile -File .\prepare-browser.ps1
-  powershell -NoProfile -File .\prepare-chatbox.ps1
-  powershell -NoProfile -File .\build.ps1
-
-v0.9 便携界面使用 Electron 44.7.0 Windows x64。prepare-browser.ps1 只下载、
-校验 SHA-256 并解压至 .temp/Browser，不安装软件。也可向 build.ps1 传入
--BrowserRuntime 指向已解压运行时。App/ 为本地界面，无 npm 生产依赖。
-XLL 不再打入业务 DLL；dist/ 下 DLL、App、Browser、Resources、Chatbox 均需随包分发。
-浏览器界面开发测试：安装 Playwright 后运行 node tests/browser-smoke.cjs，
-PLAYWRIGHT_MODULE 可指定模块目录。调试端口仅由测试进程参数临时启用。
-v0.9 新增 --upgrade（逻辑）与 --upgrade-excel（实际 Excel 合成样例），
-以及 --upgrade <样本目录> <输出目录>（只读样本、另存结果）。
-
-依赖恢复需要 NuGet 网络；已有离线包目录时可用：
-  powershell -NoProfile -File .\build.ps1 -PackageSource C:\path\to\nuget-feed
-
-build.ps1 构建 x86/x64、运行搜索与 UI 测试、输出 dist/，不会启动 Excel 或写系统设置。
-锁文件 packages.lock.json 随源码提供。新增/更新依赖时需有意识更新锁文件，正常构建使用
---locked-mode。发布前确认 dist 中是 *-packed.xll，而非未打包的构建目录 XLL。
-
-可选 Excel 集成测试（仅在受控开发/测试机运行）：
-  .\tests\SheetPilot.Tests\bin\Release\net462\SheetPilot.Tests.exe --excel <完整64位XLL路径>
-测试程序默认 AnyCPU，在64位系统下以64位运行。若测试32位Excel，需将测试工程以x86编译。
-测试会创建临时工作簿、加载 XLL、验证导航并关闭自己启动的 Excel 实例。
-Excel 被第三方加载项或安全策略阻止退出时，测试应失败并保留错误，不能据此宣称退出通过。
-
-无 Excel 的界面验证：
-  .\tests\SheetPilot.Tests\bin\Release\net462\SheetPilot.Tests.exe --render .\preview
-
-目标机人工验收清单见 VALIDATION.txt。源代码编译成功不能替代 Excel 2010 真机兼容测试。
-
-原样复制集成测试（需安装桌面 Excel）
-----------------------------------
-构建后运行 tests\SheetPilot.Tests\bin\Release\net462\SheetPilot.Tests.exe --copy-excel dist\GridPilot-x64.xll。测试创建并关闭独立的 Excel 实例，使用合成数据；请按宿主位数选择 XLL。记录复制正确性、回滚、性能、打包命令注册和进程退出。该专项与 --excel 原有功能集成测试分别运行。
-
-0.8新增：--release-features 运行分词、脱敏、公式关系和动画几何边界测试；
---release-features --excel 另启动实际 Excel，验证干净文件生成、重算、重开、
-源文件不变、拒绝覆盖及独立进程退出。--excel 包含聚焦动画回归，需要交互桌面和前台 Excel。
-依赖新增 jieba.NET 0.42.2 与 Newtonsoft.Json 13.0.3；build.ps1 从锁定包复制
-Resources/dict.txt、prob_emit.json、prob_trans.json，许可随发布包分发。
-SHA256SUMS.txt 覆盖所有发布文件（校验文件自身除外），包括词典。
-
-1.7 AI 集成：prepare-chatbox.ps1 需 Node.js/npm，下载并核对固定 Chatbox 1.20.3 安装包，提取而不执行安装器。integrations/chatbox/package-lock.json 固定准备工具依赖。最终用户无需安装 Node.js。运行 --ai --excel 检查实际 Excel 数据与写入；--ai-host <独立测试目录中的XLL> 0/1 检查两种窗口模式；node tests/browser-ai.cjs 检查原生 Chatbox 界面与本地模拟模型的完整工具对话。详细边界和步骤见 docs/v1.7/DESIGN.md、VALIDATION.md。
+更新：2026-10-21。旧版本内容可在 Git 历史中查看。

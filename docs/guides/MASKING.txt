@@ -1,53 +1,7 @@
-GridPilot 1.0 masking — current behavior
+GridPilot v1.9.1 — 文档入口
 
-No fixed 500,000 / 2,000,000 content-cell cap. Adaptive blocks cover the full Excel grid
-and skip empty regions. Formatting-only cells do not count. Memory headroom is enforced;
-32-bit hosts have less capacity. Single formula ranges allow up to 8,000,000 cells, with
-separate evaluation/depth budgets. Unsupported formulas fail rather than truncate output.
-Header inference examines the first 40 content rows, including merged hierarchy.
-Heuristics are suggestions, not proof: correct header/data start, grouping and kinds
-before export. Money/date/classification fields remain opt-in.
-Placeholders (-, dash, no-data and total labels) are not treated as identities.
-Optional sync-mentions replaces matching identity text in other constants; it can
-change free text, so inspect the preview and retained fields. Formula string rewrites
-remain conservative and branch/lookup consistency is checked.
+本指南已整理为图文版 Markdown，请打开同目录 MASKING.md。
+在线阅读：https://github.com/ionize1080/GridPilot/blob/main/docs/guides/MASKING.md
+文档总览：https://github.com/ionize1080/GridPilot/blob/main/docs/README.md
 
-Formatting retention is optional, enabled by default in new settings. It preserves
-basic cell fonts/fills/borders/number formats, dimensions, hidden rows/columns and merges.
-Conditional formatting rules and their dynamic display effects are not preserved.
-Source styles are transferred without source values, worksheet objects or relationships.
-Structural style indices and colors are never text-replaced. Sensitive custom number
-formats fall back to General. Style rows are merged incrementally. Other static text in
-custom formats/theme metadata may remain and must be reviewed when sharing externally.
-Output worksheet names remain neutral Sheet1, Sheet2 etc. Hidden source worksheets are
-included as visible output worksheets for inspection, as in v0.8.
-Source workbook is not edited; private temporary snapshots are removed on normal exit.
-Source changes after preview reject export. Existing destination files are never overwritten.
-
-
-Affixes: frequency/structure inference samples up to 2,000 values distributed through
-each column. Review inferred suffixes, label prefixes and identifier year segments.
-Edit Prefix/Suffix/Digits; names permit 0-18 digits, identifiers require 1-18.
-Natural-person mode produces short Chinese names. All rules in one domain synchronize.
-Identity allocation rejects original substrings and duplicate replacements. Too small
-a random space fails with an instruction to increase digits or revise affixes.
-
-Preview shows 60 changes; export processes all cells. Scan displays processed count;
-known-size phases show phase percentage. Close/cancel prevents commit. An active Office
-COM call must return before cancellation can finish. Private Excel runs on its own STA;
-source access and final verification stay on the host STA. A private process that
-remains after Quit receives bounded cleanup. Existing user Excel is never terminated.
-
-Supported formulas: A1 references, bounded and restricted whole-column ranges, same-
-and cross-sheet references, arithmetic (+ - * / %), comparisons, IF, SUM, COUNT,
-AVERAGE, MIN, MAX, AND, OR, NOT, SUMIF(S), COUNTIF(S), exact VLOOKUP/MATCH and INDEX.
-Unknown functions, names, external links, dynamic/array formulas, structured references,
-whole-row references, wildcard lookup, concatenation and exponentiation are rejected.
-Formula identity results must be mapped; date rules validate both original and shifted
-serials, including Excel's fictitious 1900 leap day. Amount/date rules remain opt-in.
-Validation concerns current data, not arbitrary future workbook inputs.
-
-Mapping lasts for the current window only. No persistent cross-period encrypted map.
-Maximum coordinates do not imply that 17 billion populated cells fit in memory.
-Temporary source copies are removed on normal completion/failure; abnormal termination
-can leave files under the current user's local GridPilot Staging directory.
+更新：2026-10-21。旧版本内容可在 Git 历史中查看。

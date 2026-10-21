@@ -1,5 +1,7 @@
 # v1.6 验证记录
 
+> 此页保留该版本的设计／验证记录；后续行为以 [当前指南](../README.md) 与 [当前架构](../development/ARCHITECTURE.md) 为准。
+
 日期：2026-10-16。环境：Windows 11、Excel 16 x64、.NET Framework 4.6.2 目标框架、项目锁定 Electron 运行时。
 
 ## 排序引擎与 Excel

@@ -1,5 +1,7 @@
 # v1.8 Excel AI integration
 
+> 此页保留该版本的设计／验证记录；后续行为以 [当前指南](../README.md) 与 [当前架构](../development/ARCHITECTURE.md) 为准。
+
 Chatbox 1.20.3 remains the model client. Its provider implementations, fetch functions, authentication, Chatbox-specific headers and native request loop are unchanged. The wrapper retains the official app name/product name/version so integration branding does not leak into the native application identity. `Chatbox/provenance.json` records exact, hash-pinned integration patch anchors. Electron remains the existing portable runtime; automatic Chatbox self-update remains disabled.
 
 ## Interaction

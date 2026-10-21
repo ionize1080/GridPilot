@@ -1,27 +1,42 @@
-# 文档目录
+# GridPilot 文档
 
-- [v1.9.1 交互修复发布说明](releases/RELEASE-v1.9.1.md)、[验证与恢复边界](v1.9.1/VALIDATION.md)
+**适用版本：v1.9.1 · 更新：2026-10-21**
 
-- [v1.9 发布说明](releases/RELEASE-v1.9.0.md)、[设计与恢复边界](v1.9/DESIGN.md)、[验证记录](v1.9/VALIDATION.md)
+先按你要完成的事情选择入口。当前指南描述最新行为；版本目录保存当时的设计和测试事实。
 
-- [v1.7 AI 助手发布说明](releases/RELEASE-v1.7.0.md)、[交互调研与设计](v1.7/DESIGN.md)、[验证记录](v1.7/VALIDATION.md)
+## 开始使用
 
-- [多级排序使用说明](guides/SORTING.txt)
-- [复制](guides/COPYING.txt)、[简易脱敏](guides/SIMPLE-MASKING.txt)、[数据库](guides/DATABASE.txt)、[监管核对](guides/RECONCILIATION.txt)
-- [架构](development/ARCHITECTURE.txt)、[构建](development/BUILD.txt)
-- [v1.6 验证记录](v1.6/VALIDATION.md)、[历史验证](validation/VALIDATION.txt)
-- [v1.6.1 导航修复与验证](releases/RELEASE-v1.6.1.md)
-- [v1.6 更新说明](releases/RELEASE-v1.6.0.md)，历史更新位于 `releases/`
-- 第三方许可原文位于 `licenses/`，清洁便携包中可从“设置 → 关于与许可”阅读。
+| 入口 | 内容 |
+| --- | --- |
+| [快速开始](guides/QUICKSTART.md) | 下载、选择 XLL、加载、第一次使用与升级 |
+| [AI 助手](guides/AI.md) | 范围选择、10 项 MCP 工具、自动批准、批量建议、快照与窗口切换 |
+| [设置与偏好](guides/SETTINGS.md) | 功能开关、外观、导航、聚焦与配置保存 |
+| [兼容性](guides/COMPATIBILITY.md) | 运行条件、已测平台与目标机验收 |
+| [故障排查](guides/TROUBLESHOOTING.md) | 加载、卡顿、建议应用、恢复与窗口问题 |
+| [数据与存储](guides/DATA-AND-STORAGE.md) | 哪些数据联网、文件保存在哪里、升级与清理 |
 
-## 图标规范
+## 功能指南
 
-功能图标统一 32 单位画布、圆角笔触、透明背景和 1.65 单位线宽，以 4 倍分辨率绘制后缩小。支持 96–288 DPI 及青瓷、晴蓝、石墨三套配色。每个功能保持不同的轮廓或中心标识，复制公式与复制值分别使用 fx / 123；文本与数值分别使用 A / 12。自动测试检查 16 个功能图标互不重复。
+| 工作方式 | 指南 |
+| --- | --- |
+| 整理工作簿 | [导航、聚焦、改名、文本与数值](guides/WORKSHEET-TOOLS.md) · [多级排序](guides/SORTING.md) |
+| 输出与清理 | [原样复制](guides/COPYING.md) · [简易脱敏](guides/SIMPLE-MASKING.md) · [智能脱敏](guides/MASKING.md) · [中英文分词](guides/SEGMENTATION.md) |
+| 报表分析 | [报表数据库](guides/DATABASE.md) · [监管与财务核对](guides/RECONCILIATION.md) |
+| AI 分析与操作 | [使用流程与恢复](guides/AI.md) · [MCP 参数速查](development/MCP.md) |
 
-导航工具使用小尺寸矢量图标。升降序箭头表示下一次操作，悬停提示说明规则和作用范围；高级排序、刷新、设置各用独立图形。工具始终在首行，主体空间留给工作表条目。
+## 开发与验证
 
-## 导航交互参考
+- [架构](development/ARCHITECTURE.md)：Excel 主线程、原生窗格、Electron、MCP、数据流和恢复机制。
+- [构建与测试](development/BUILD.md)：固定依赖、构建命令、专项测试、真实 API 测试与发布检查。
+- [界面规范](development/UI.md)：窗口、图标、菜单、进度和应用反馈。
+- [验证总览](validation/README.md)：当前证据、测试层次与尚未完成的目标机验收。
+- [版本记录](releases/README.md)：所有正式版本说明、历史设计和验证入口。
+- [第三方说明](licenses/THIRD-PARTY-NOTICES.txt) · [Chatbox 来源与补丁](licenses/CHATBOX-NOTICES.txt)：许可原文保留在 `licenses/`。
 
-参考 PDF-XChange 官方[书签面板说明](https://help.pdf-xchange.com/pdfxe10/bookmarks_ed.html)及[快捷键表](https://help.pdf-xchange.com/pdfxt10/keyboard-shortcuts_ed.html)：单击跳转、F2 改名、Space 跳转、Insert 新建、Alt+上/下移动。双击改名、失焦提交及 Enter/Esc 按本项目需求实现。
+## 文档约定
 
-未覆盖 Excel 的全局 Ctrl+B（加粗）。PDF 的书签层级、删除页面等操作不映射为删除 Excel 工作表。
+当前指南使用 Markdown，方便在 GitHub 阅读图表、表格和截图。旧的 `.txt` 路径保留为新文档的入口，便携包中也可直接找到同名 Markdown。
+
+历史页面顶部标明适用版本；其中的数字、限制、问题与结论只代表记录当时，不累加为当前版本的测试结果。截图使用合成数据；较早版本的功能示意会注明拍摄版本。许可证原文与测试样本不作改写。
+
+[返回项目首页](../README.md)

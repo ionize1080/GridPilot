@@ -1,5 +1,7 @@
 # 监管变动核对工作区
 
+> 此页保留该版本的设计／验证记录；后续行为以 [当前指南](../README.md) 与 [当前架构](../development/ARCHITECTURE.md) 为准。
+
 ## 目标与交付范围
 
 将每期 VLOOKUP、辅助列、数据透视、Top N 小表、SUBSTITUTE / TEXTJOIN 串联成可复用的核对方案。v1.4 在 GridPilot 中新增独立工作区，所有运算在本机完成。源工作簿只读，保留已有宏与公式；结果独立导出。

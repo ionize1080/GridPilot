@@ -1,5 +1,7 @@
 # v1.8.0 validation
 
+> 此页保留该版本的设计／验证记录；后续行为以 [当前指南](../README.md) 与 [当前架构](../development/ARCHITECTURE.md) 为准。
+
 Environment: Windows 11, Excel 16 x64, .NET Framework 4.6.2 target, bundled Electron 44.7.0, pinned Chatbox 1.20.3. Test workbooks and attachment fixtures are synthetic. Existing user workbooks and Chatbox profiles were not used for model tests.
 
 ## Automated checks

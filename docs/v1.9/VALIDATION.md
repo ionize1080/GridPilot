@@ -1,5 +1,7 @@
 # v1.9.0 验证记录
 
+> 此页保留该版本的设计／验证记录；后续行为以 [当前指南](../README.md) 与 [当前架构](../development/ARCHITECTURE.md) 为准。
+
 验证日期：2026-10-21。环境：Windows 11 x64、Excel 16 x64、.NET Framework 4.6.2 目标、Electron 44.7、原生 Chatbox 1.20.3。所有工作簿测试使用合成数据。
 
 ## 构建与回归
