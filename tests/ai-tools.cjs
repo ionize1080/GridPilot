@@ -1,7 +1,7 @@
 const assert=require('node:assert/strict');
 const {tools,handleTool}=require('../integrations/chatbox/tools.cjs');
 (async()=>{
-  assert.equal(tools.length,9);assert(!tools.some(t=>/apply|undo/.test(t.name)));
+  assert.equal(tools.length,10);assert(!tools.some(t=>/apply|undo/.test(t.name)));
   let calls=0,last,published;
   const host=async request=>{calls++;last=request;return {total:2,cells:[],proposalId:'proposal'};};
   const publish=value=>published=value;

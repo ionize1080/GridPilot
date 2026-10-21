@@ -13,7 +13,9 @@ namespace SheetPilot.Excel
     public sealed class AiPane : UserControl
     {
         private IntPtr child,owner;
-        private int originalStyle;
+        private int originalStyle,originalExtendedStyle;
+        [DllImport("dwmapi.dll")] private static extern int DwmSetWindowAttribute(IntPtr hwnd,int attribute,ref int value,int size);
+        private static void SetFrame(IntPtr hwnd, bool docked) { int policy=docked?1:0; DwmSetWindowAttribute(hwnd,2,ref policy,4); }
         private readonly Timer tracking=new Timer{Interval=120};
         private System.Drawing.Rectangle lastBounds;
         [DllImport("user32.dll")] private static extern int GetWindowLong(IntPtr window,int index);
@@ -32,17 +34,18 @@ namespace SheetPilot.Excel
         }
         internal void Attach(IntPtr window)
         {
-            child=window;originalStyle=GetWindowLong(child,-16);
+            child=window;originalStyle=GetWindowLong(child,-16);originalExtendedStyle=GetWindowLong(child,-20);
             // Keep Chromium as an owned top-level HWND. SetParent/WS_CHILD lets
             // Excel's accelerator loop consume text before Chromium receives it.
             owner=GetAncestor(Handle,2);Owner(child,owner);
             SetWindowLong(child,-16,(originalStyle & ~0x00C40000 & ~0x40000000)|unchecked((int)0x80000000));
+            SetWindowLong(child,-20,originalExtendedStyle & ~0x00000301);SetFrame(child,true);
             lastBounds=System.Drawing.Rectangle.Empty;Fit();tracking.Start();
         }
         internal void Detach()
         {
             tracking.Stop();if(child==IntPtr.Zero)return;
-            Owner(child,IntPtr.Zero);SetWindowLong(child,-16,originalStyle);
+            Owner(child,IntPtr.Zero);SetWindowLong(child,-16,originalStyle);SetWindowLong(child,-20,originalExtendedStyle);SetFrame(child,false);
             SetWindowPos(child,IntPtr.Zero,120,100,1000,800,0x34);ShowWindow(child,4);child=IntPtr.Zero;
         }
         private void Fit()
@@ -61,6 +64,7 @@ namespace SheetPilot.Excel
     public sealed partial class ToolsModule
     {
         private PortableWindow aiWindow;
+        private readonly System.Threading.SemaphoreSlim aiRequests=new System.Threading.SemaphoreSlim(1,1);
         private AiOperations ai;
         private CustomTaskPane aiPane;
         private AiPane aiControl;
@@ -107,22 +111,28 @@ namespace SheetPilot.Excel
             bool sidebar = settings.AiDisplayMode == 0;
             try
             {
-                aiWindow = new PortableWindow(directory, message =>
+                aiWindow = new PortableWindow(directory, async message =>
                 {
+                    await aiRequests.WaitAsync();
+                    try {
                     string action = (string)message["action"];
                     object result;
                     switch (action)
                     {
                         case "aiReady":
-                            aiHandle=new IntPtr(long.Parse((string)message["handle"]));
+                            long handle=long.Parse((string)message["handle"]);aiHandle=IntPtr.Size==4?new IntPtr(unchecked((int)handle)):new IntPtr(handle);
                             SetAiMode(settings.AiDisplayMode==0);
                             result = new { mode = settings.AiDisplayMode==0 ? "sidebar" : "window", version = "1.20.3" }; break;
                         case "aiMode":
                             settings.AiDisplayMode=(string)message["mode"]=="sidebar"?0:1;store.Save(settings);SetAiMode(settings.AiDisplayMode==0);
                             result=new {mode=settings.AiDisplayMode==0?"sidebar":"window",message="已切换工作方式"};break;
                         case "aiApplyBatch": result=ai.ApplyBatch(message["proposalIds"]?.ToObject<string[]>());break;
-                        case "aiContext": result = ai.Context(); break;
-                        case "aiCapture": result = ai.Capture((string)message["scope"]); break;
+                        case "aiApproval": result = ai.Approval((bool?)message["enabled"] == true); break;
+                        case "aiCheckpoint": result = ai.CheckpointState(); break;
+                        case "aiRestore": result = ai.RestoreCheckpoint((string)message["position"] == "before"); break;
+                        case "aiContext": var state=JObject.FromObject(ai.Context());state["checkpoint"]=JToken.FromObject(ai.CheckpointState());result=state;break;
+                        case "aiOpenRecovery": var recovery=(string)JObject.FromObject(ai.CheckpointState())["folder"];if(recovery==null||!Directory.Exists(recovery))throw new InvalidOperationException("尚无完整备份。");System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", "\"" + recovery + "\""){UseShellExecute=false});result=new{message="已打开本地完整备份"};break;
+                        case "aiCapture": result = await ai.CaptureAsync((string)message["scope"]); break;
                         case "aiInspect": result=ai.Metadata((string)message["snapshotId"]);break;
                         case "aiRead": result = ai.Read(message); break;
                         case "aiPropose": result = ai.Propose(message); break;
@@ -131,8 +141,12 @@ namespace SheetPilot.Excel
                         case "aiNavigate": result = ai.Navigate((string)message["snapshotId"], (string)message["sheet"], (string)message["address"]); break;
                         default: throw new InvalidOperationException("未知AI操作。");
                     }
-                    return Task.FromResult(result);
+                    return result;
+                    } finally { aiRequests.Release(); }
                 }, "Chatbox");
+                aiWindow.CancelRequested += () => { if(ai!=null)ai.CancelCapture=true; };
+                ai.Progress = (phase,percent,current,total) => aiWindow?.SendProgress(phase,percent,current,total);
+                ai.YieldCapture = async () => { await Task.Delay(1); };
                 portableWindows.Add(aiWindow);
                 aiWindow.Closed += CloseAi;
             }

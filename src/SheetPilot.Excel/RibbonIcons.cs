@@ -32,16 +32,25 @@ namespace SheetPilot.Excel
                 g.Clear(Color.Transparent); g.SmoothingMode = SmoothingMode.AntiAlias; g.PixelOffsetMode = PixelOffsetMode.HighQuality; g.ScaleTransform(size*4 / 32f, size*4 / 32f);
                 if (id == "GridPilot_AI")
                 {
-                    // Open grid + a four-point spark; shared palette, legible at Ribbon size.
-                    using(var outline=new GraphicsPath())
+                    // A single folded orbit: balanced negative space, readable at 16px.
+                    using(var orbit=new GraphicsPath())
+                    using(var gradient=new LinearGradientBrush(new PointF(4,3),new PointF(28,29),
+                        theme==1?Color.FromArgb(100,158,238):theme==2?Color.FromArgb(132,150,166):Color.FromArgb(85,190,163),
+                        theme==1?Color.FromArgb(49,80,173):theme==2?Color.FromArgb(48,65,84):Color.FromArgb(20,105,85)))
                     {
-                        outline.AddArc(3,7,6,6,180,90);outline.AddLine(6,7,17,7);outline.AddLine(17,7,17,11);
-                        outline.AddLine(17,11,25,11);outline.AddLine(25,11,25,25);outline.AddArc(19,22,6,6,0,90);
-                        outline.AddLine(22,28,6,28);outline.AddArc(3,22,6,6,90,90);outline.CloseFigure();
-                        g.FillPath(faint,outline);g.DrawPath(pen,outline);
+                        orbit.AddBezier(16,2,24,2,30,8,30,16);
+                        orbit.AddBezier(30,16,30,24,24,30,16,30);
+                        orbit.AddBezier(16,30,8,30,2,24,2,16);
+                        orbit.AddBezier(2,16,2,8,8,2,16,2);orbit.CloseFigure();
+                        g.FillPath(gradient,orbit);
                     }
-                    g.DrawLine(pen,4,17,24,17);g.DrawLine(pen,11,8,11,27);g.DrawLine(pen,4,22,24,22);
-                    g.FillPolygon(accent,new[]{new Point(24,1),new Point(26,6),new Point(31,8),new Point(26,10),new Point(24,15),new Point(22,10),new Point(17,8),new Point(22,6)});
+                    using(var ribbon=new Pen(Color.FromArgb(245,255,252),2.4f){StartCap=LineCap.Round,EndCap=LineCap.Round,LineJoin=LineJoin.Round})
+                    {
+                        g.DrawBezier(ribbon,9,20,5,10,17,5,22,11);
+                        g.DrawBezier(ribbon,22,11,27,17,20,25,12,23);
+                        g.DrawLines(ribbon,new[]{new PointF(12,23),new PointF(16,14),new PointF(24,15)});
+                    }
+                    g.FillEllipse(Brushes.White,14.4f,13,3.2f,3.2f);
                 }
                 else if (id.Contains("Refresh")) { g.DrawArc(pen, 5, 5, 22, 22, 40, 285); g.FillPolygon(accent, new[] { new Point(24, 3), new Point(29, 11), new Point(20, 11) }); }
                 else if (id.Contains("Focus")) { g.FillRectangle(faint, 2, 12, 28, 8); g.FillRectangle(faint, 12, 2, 8, 28); g.DrawRectangle(pen, 3, 3, 26, 26); g.DrawLine(pen, 3, 12, 29, 12); g.DrawLine(pen, 3, 20, 29, 20); g.DrawLine(pen, 12, 3, 12, 29); g.DrawLine(pen, 20, 3, 20, 29); g.FillRectangle(accent, 13, 13, 6, 6); }

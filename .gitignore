@@ -11,3 +11,10 @@ GridPilot.tools.json*
 .temp/
 **/node_modules/
 release-v*/
+
+.env
+.env.*
+*.secret
+**/test-profile/
+**/ui-profile/
+**/Recovery/

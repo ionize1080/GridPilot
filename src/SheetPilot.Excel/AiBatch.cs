@@ -10,7 +10,7 @@ namespace SheetPilot.Excel
         {
             public string address,formula;
             public object value,beforeValue,beforeFormula,afterFormula;
-            public bool hadFormula;
+            public bool hadFormula,afterHasFormula;
         }
         private static bool Same(object a,object b) => JToken.DeepEquals(a==null?JValue.CreateNull():JToken.FromObject(a),b==null?JValue.CreateNull():JToken.FromObject(b));
         private object Worksheet(Snapshot snapshot,string name)
@@ -24,10 +24,10 @@ namespace SheetPilot.Excel
             var snapshot=Get(id);var result=new List<object>();
             foreach(string name in snapshot.sheets)
             {
-                object sheet=Worksheet(snapshot,name),tables=null,charts=null;
+                object sheet=Worksheet(snapshot,name),tables=null,charts=null,pivots=null;
                 try
                 {
-                    tables=((dynamic)sheet).ListObjects;charts=((dynamic)sheet).ChartObjects();
+                    tables=((dynamic)sheet).ListObjects;charts=((dynamic)sheet).ChartObjects();pivots=((dynamic)sheet).PivotTables();
                     var ts=new List<object>();
                     for(int i=1;i<=(int)((dynamic)tables).Count;i++)
                     {
@@ -35,8 +35,8 @@ namespace SheetPilot.Excel
                         try{range=((dynamic)t).Range;ts.Add(new{name=(string)((dynamic)t).Name,address=(string)((dynamic)range).Address[false,false]});}
                         finally{Release(range);Release(t);}
                     }
-                    result.Add(new{sheet=name,protectedContents=(bool)((dynamic)sheet).ProtectContents,tables=ts,chartCount=(int)((dynamic)charts).Count});
-                }finally{Release(charts);Release(tables);Release(sheet);}
+                    result.Add(new{sheet=name,protectedContents=(bool)((dynamic)sheet).ProtectContents,tables=ts,chartCount=(int)((dynamic)charts).Count,pivotCount=(int)((dynamic)pivots).Count});
+                }finally{Release(pivots);Release(charts);Release(tables);Release(sheet);}
             }
             return new{snapshotId=id,book=snapshot.bookName,sheets=result,ranges=snapshot.ranges};
         }
@@ -49,7 +49,7 @@ namespace SheetPilot.Excel
             try
             {
                 range=((dynamic)sheet).Range[address];
-                CheckWritable(snapshot,sheet,range,kind=="chart");
+                CheckWritable(snapshot,sheet,range,kind=="chart"||kind=="pivot");
                 if(kind=="formula"||kind=="values"||kind=="formulas")
                 {
                     var data=request["data"] as JArray;
@@ -77,6 +77,11 @@ namespace SheetPilot.Excel
                     p.style=request["style"] as JObject??throw new InvalidOperationException("缺少格式。");ValidateStyle(p.style);p.beforeStyle=ReadStyle(range,p.style);
                     if(p.beforeStyle.Properties().Any(v=>v.Value.Type==JTokenType.Null))throw new InvalidOperationException("目标存在混合格式，请拆分成格式一致的范围后再提出建议。");
                 }
+                else if(kind=="pivot")
+                {
+                    if((bool)((dynamic)snapshot.book).ProtectStructure)throw new InvalidOperationException("工作簿结构受保护，不能创建透视表工作表。");
+                    ValidatePivot(p,sheet);p.sourceFormula=((dynamic)range).Formula;
+                }
                 else if(kind=="chart")
                 {
                     string type=(string)request["chartType"];
@@ -86,7 +91,9 @@ namespace SheetPilot.Excel
                 }
                 else throw new InvalidOperationException("未知的建议类型。");
                 proposals.Add(p.id,p);
-                return new{proposalId=p.id,snapshotId=p.snapshot,book=snapshot.bookName,sheet=name,address,kind,formula=p.formula,data=request["data"],style=p.style,title=request["title"],before=p.edits?.Take(6).Select(e=>e.beforeFormula).ToArray(),count=p.edits?.LongLength??bounds.Size,status="待一键应用，尚未写入 Excel。"};
+                bool applied = automatic;
+                if (applied) { try { ApplyBatch(new[] { p.id }); } catch { automatic=false; throw; } }
+                return new{proposalId=p.id,snapshotId=p.snapshot,book=snapshot.bookName,sheet=name,address,kind,formula=p.formula,data=request["data"],style=p.style,title=request["title"],before=p.edits?.Take(6).Select(e=>e.beforeFormula).ToArray(),count=p.edits?.LongLength??bounds.Size,applied,checkpoint=CheckpointState(),status=applied?"已自动应用；已保留变更前后快照。":"待一键应用，尚未写入 Excel。"};
             }finally{Release(range);Release(sheet);}
         }
         private static readonly Dictionary<string,int> ChartTypes=new Dictionary<string,int>{{"column",51},{"bar",57},{"line",4},{"pie",5},{"scatter",-4169},{"area",1}};
@@ -177,16 +184,21 @@ namespace SheetPilot.Excel
             var snapshot=Get(p.snapshot);object sheet=Worksheet(snapshot,p.sheet),range=null;
             try
             {
-                range=((dynamic)sheet).Range[p.address];CheckWritable(snapshot,sheet,range,p.kind=="chart");
+                range=((dynamic)sheet).Range[p.address];CheckWritable(snapshot,sheet,range,p.kind=="chart"||p.kind=="pivot");
                 if(p.edits!=null)foreach(var e in p.edits)
                 {
                     object cell=((dynamic)sheet).Range[e.address];
-                    try{if(!Same(((dynamic)cell).Formula,revert?e.afterFormula:e.beforeFormula))throw new InvalidOperationException("目标内容已变化，整批未修改，请重新生成建议。");}
+                    try{if(!Same(((dynamic)cell).Formula,revert?e.afterFormula:e.beforeFormula)||(bool)((dynamic)cell).HasFormula!=(revert?e.afterHasFormula:e.hadFormula))throw new InvalidOperationException("目标内容已变化，整批未修改，请重新生成建议。");}
                     finally{Release(cell);}
                 }
                 else if(p.kind=="format")
                 {if(!JToken.DeepEquals(ReadStyle(range,p.beforeStyle),revert?p.afterStyle:p.beforeStyle))throw new InvalidOperationException("目标格式已变化，整批未修改。");}
-                else if(!Same(((dynamic)range).Formula,p.sourceFormula))throw new InvalidOperationException("图表源数据已变化，请重新生成建议。");
+                else if(!Same(((dynamic)range).Formula,revert?p.afterSourceFormula??p.sourceFormula:p.sourceFormula))throw new InvalidOperationException("图表源数据已变化，请重新生成建议。");
+                if(p.kind=="pivot")
+                {
+                    if((bool)((dynamic)snapshot.book).ProtectStructure)throw new InvalidOperationException("工作簿结构受保护。");
+                    EnsurePivotDestination(p,revert);
+                }
                 if(revert&&p.kind=="chart")
                 {
                     object charts=((dynamic)sheet).ChartObjects(),chart=null;
@@ -206,13 +218,14 @@ namespace SheetPilot.Excel
             try
             {
                 range=((dynamic)sheet).Range[p.address];
+                if(p.kind=="pivot"){WritePivot(p,range,revert);return;}
                 if(p.edits!=null)foreach(var e in p.edits)
                 {
                     object cell=((dynamic)sheet).Range[e.address];
                     try
                     {
                         if(revert){if(e.hadFormula)((dynamic)cell).Formula=e.beforeFormula;else SetValue(cell,e.beforeValue);}
-                        else{if(e.formula!=null)((dynamic)cell).Formula=e.formula;else SetValue(cell,e.value);e.afterFormula=((dynamic)cell).Formula;}
+                        else{if(e.formula!=null)((dynamic)cell).Formula=e.formula;else SetValue(cell,e.value);e.afterFormula=((dynamic)cell).Formula;e.afterHasFormula=(bool)((dynamic)cell).HasFormula;}
                     }finally{Release(cell);}
                 }
                 else if(p.kind=="format")
@@ -239,6 +252,7 @@ namespace SheetPilot.Excel
         public object Apply(string id,bool revert=false) => revert?ApplyBatch(null,true):ApplyBatch(new[]{id});
         public object ApplyBatch(string[] ids,bool revert=false)
         {
+            if(revert)return RestoreCheckpoint(true);
             Proposal[] batch;
             if(revert)batch=undo??throw new InvalidOperationException("没有可撤销的 AI 修改。");
             else
@@ -248,17 +262,24 @@ namespace SheetPilot.Excel
                 for(int i=0;i<batch.Length;i++)for(int j=0;j<i;j++)
                 {
                     var x=batch[i];var y=batch[j];
-                    if(!ReferenceEquals(Get(x.snapshot).book,Get(y.snapshot).book)||x.sheet!=y.sheet||x.kind=="chart"||y.kind=="chart"||(x.kind=="format")!= (y.kind=="format"))continue;
+                    if(!ReferenceEquals(Get(x.snapshot).book,Get(y.snapshot).book)||x.sheet!=y.sheet||x.kind=="chart"||y.kind=="chart"||x.kind=="pivot"||y.kind=="pivot"||(x.kind=="format")!= (y.kind=="format"))continue;
                     var a=AiRange.Parse(x.address);var b=AiRange.Parse(y.address);
                     if(a.Row<=b.LastRow&&b.Row<=a.LastRow&&a.Column<=b.LastColumn&&b.Column<=a.LastColumn)throw new InvalidOperationException("待应用建议包含重叠目标，请丢弃旧建议后重试。");
                 }
             }
             foreach(var p in batch)CheckProposal(p,revert);
+            CheckCheckpointExtension(batch);
+            bool extend = automatic && !newCheckpoint && undo != null;
+            string folder = extend ? checkpointFolder : SaveCheckpoint(batch, "before");
+            Proposal[] candidate=null;
             dynamic app=application();bool events=app.EnableEvents,screen=app.ScreenUpdating;var written=new List<Proposal>();
             try
             {
                 app.EnableEvents=false;app.ScreenUpdating=false;
                 foreach(var p in revert?batch.Reverse():batch){written.Add(p);WriteProposal(p,revert);}
+                candidate=CombineCheckpoint(extend?undo.Concat(batch).ToArray():batch);
+                CompleteCheckpointSources(candidate);
+                SaveCheckpoint(batch, "after-" + Guid.NewGuid().ToString("N"), folder);
             }
             catch(Exception ex)
             {
@@ -267,8 +288,11 @@ namespace SheetPilot.Excel
                 throw new InvalidOperationException(failures.Count==0?"操作失败，已恢复整批修改："+ex.Message:"操作失败且恢复未完成，请检查工作簿："+ex.Message+"；"+string.Join("；",failures));
             }
             finally{app.EnableEvents=events;app.ScreenUpdating=screen;}
-            if(revert)undo=null;else{undo=batch;foreach(var p in batch)proposals.Remove(p.id);}
-            return new{message=revert?"已撤销整批 AI 修改。":"已应用 "+batch.Length+" 项建议。",appliedIds=batch.Select(p=>p.id).ToArray()};
+            undo=candidate;
+            checkpointFolder=folder;checkpointBefore=false;newCheckpoint=false;
+            foreach(var p in batch)proposals.Remove(p.id);
+            foreach(var key in snapshots.Keys.Where(key=>!snapshotOrder.Contains(key)&&!undo.Any(p=>p.snapshot==key)).ToArray()){snapshots[key].Dispose();snapshots.Remove(key);}
+            return new{message="已应用 "+batch.Length+" 项建议；前后快照已保存。",appliedIds=batch.Select(p=>p.id).ToArray(),checkpoint=CheckpointState()};
         }
     }
 }

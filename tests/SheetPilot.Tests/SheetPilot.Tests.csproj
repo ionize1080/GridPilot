@@ -6,6 +6,8 @@
   <Compile Include="../../src/SheetPilot.Excel/AdvancedSortOperations.cs" Link="AdvancedSortOperations.cs" />
   <Compile Include="../../src/SheetPilot.Excel/AiRange.cs" Link="AiRange.cs" />
   <Compile Include="../../src/SheetPilot.Excel/AiBatch.cs" Link="AiBatch.cs" />
+  <Compile Include="../../src/SheetPilot.Excel/AiCheckpoints.cs" Link="AiCheckpoints.cs" />
+  <Compile Include="../../src/SheetPilot.Excel/AiPivot.cs" Link="AiPivot.cs" />
   <Compile Include="../../src/SheetPilot.Excel/AiOperations.cs" Link="AiOperations.cs" />
     <Compile Include="../../src/SheetPilot.Excel/SortOperations.cs" Link="SortOperations.cs"/>
   <Compile Include="../../src/SheetPilot.Excel/ReportReader.cs" Link="ReportReader.cs"/><Compile Include="../../src/SheetPilot.Excel/NavigationEditing.cs" Link="NavigationEditing.cs"/>

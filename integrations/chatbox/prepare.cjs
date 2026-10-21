@@ -29,17 +29,35 @@ patch('dist/main/main.js',
   'await createWindow(),void 0');
 patch('dist/renderer/js/InputBox.DH3jG147.js',
   'constructedMessage:E.message,needGenerating:s,',
-  'constructedMessage:await window.gridpilotExcel.captureMessage(E.message),needGenerating:s,');
+  'constructedMessage:await window.gridpilotCaptureMessage(E.message),needGenerating:s,');
 patch('dist/renderer/js/index.TlLbGKvw.js',
   'maxContextMessageCount:nu.maxContextMessageCount});const yu=[];',
-  'maxContextMessageCount:nu.maxContextMessageCount});ku=window.gridpilotExcel.expandMessages(ku);const yu=[];');
+  'maxContextMessageCount:nu.maxContextMessageCount});ku=window.gridpilotExcel.expandMessages(ku,eu);const yu=[];');
 patch('dist/renderer/js/InputBox.DH3jG147.js',
   'rr.knowledgeBase&&!M&&o.jsx(Bo,{currentKnowledgeBaseId:de?.id,onSelect:nn,',
   'o.jsx("span",{id:"gridpilot-toolbar-slot"}),rr.knowledgeBase&&!M&&o.jsx(Bo,{currentKnowledgeBaseId:de?.id,onSelect:nn,');
+patch('dist/renderer/js/index.TlLbGKvw.js','function getToolName(eu){return{',
+  'function getToolName(eu){const names={excel_read:"读取单元格",excel_find:"查找数据",excel_statistics:"统计数据",excel_inspect:"检查工作簿",excel_propose_formula:"写入公式",excel_propose_values:"写入内容",excel_propose_formulas:"写入批量公式",excel_propose_format:"调整格式",excel_propose_chart:"生成图表",excel_propose_pivot:"生成透视表"};if(eu.startsWith("mcp__gridpilot_excel__")){const label=names[eu.slice("mcp__gridpilot_excel__".length)];if(label)return "Excel · "+label;}return{');
 const renderer=path.join(native,'dist/renderer/js/index.TlLbGKvw.js');
 const rendererBefore=hash(renderer);
 fs.appendFileSync(renderer,'\nObject.defineProperty(window.File.prototype,"path",{configurable:true,get(){return window.gridpilotExcel.filePath(this);}});\nwindow.addEventListener("gridpilot:sidebar",()=>uiStore.getState().setShowSidebar(false));\n');
 patches.push({file:'dist/renderer/js/index.TlLbGKvw.js',originalSha256:rendererBefore,patchedSha256:hash(renderer),append:'Restore File.path through Electron webUtils for native attachment parsing. Collapse the native conversation drawer once when entering the Excel sidebar; its original toggle stays available.'});
+const readinessBefore=hash(renderer);
+fs.appendFileSync(renderer,`
+window.gridpilotToolsStatus=()=>({state:mcpController.getServer("gridpilot-excel")?.status?.state,count:Object.keys(mcpController.getAvailableTools()).filter(n=>n.includes("excel_")).length});
+window.gridpilotCaptureMessage=async message=>{
+  if(window.gridpilotExcel.wantsContext()){
+    const started=Date.now();
+    while(!window.gridpilotToolsStatus().count){
+      const server=mcpController.getServer("gridpilot-excel");
+      if(server?.status?.error || Date.now()-started>15000)throw Error("Excel工具尚未连接，请在工具菜单中启用 GridPilot Excel 后重试。");
+      await new Promise(resolve=>setTimeout(resolve,100));
+    }
+  }
+  return window.gridpilotExcel.captureMessage(message);
+};
+`);
+patches.push({file:'dist/renderer/js/index.TlLbGKvw.js',originalSha256:readinessBefore,patchedSha256:hash(renderer),append:'Wait for native GridPilot MCP schema discovery before the first model request; never synthesize tool calls from text.'});
 const preload=path.join(native,'dist/preload/index.js'),original=hash(preload);
 fs.appendFileSync(preload,'\n'+fs.readFileSync(path.join(__dirname,'preload.cjs'),'utf8'));
 patches.push({file:'dist/preload/index.js',originalSha256:original,patchedSha256:hash(preload),append:'integrations/chatbox/preload.cjs'});

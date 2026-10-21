@@ -10,6 +10,7 @@ using System.Text;
 
 internal static partial class Program
 {
+    [DllImport("dwmapi.dll")] private static extern int DwmGetWindowAttribute(IntPtr hwnd,int attribute,out int value,int size);
     private delegate bool AiEnumWindow(IntPtr window, IntPtr data);
     [DllImport("user32.dll", EntryPoint="EnumChildWindows")] private static extern bool AiEnumChildren(IntPtr parent, AiEnumWindow callback, IntPtr data);
     [DllImport("user32.dll", EntryPoint="GetWindowThreadProcessId")] private static extern uint AiWindowProcess(IntPtr window, out uint process);
@@ -53,6 +54,7 @@ internal static partial class Program
             Check(chrome != IntPtr.Zero, mode == 0 ? "native Chatbox is docked to actual Excel task pane" : "native Chatbox opens as independent window");
             Check((AiStyle(chrome,-16)&0x40000000)==0,"Chromium remains a keyboard-capable top-level window");
             Check((AiOwner(chrome,4)==excelWindow)==(mode==0),"Excel owns docked window only in sidebar mode");
+            if(mode==0){int hr=DwmGetWindowAttribute(chrome,1,out int enabled,4);Check(hr==0&&enabled==0,"sidebar disables DWM non-client rendering for Win10 borders");Check((AiStyle(chrome,-20)&0x301)==0,"sidebar has no client/static/dialog edges");}
             Console.WriteLine("AI host window=" + chrome + " process=" + browser.Id + " title=" + browser.MainWindowTitle);
             app.Run("GridPilot_AI"); // Reopen activates the same process/pane.
             AiPost(chrome, 0x0010, IntPtr.Zero, IntPtr.Zero);
@@ -118,8 +120,8 @@ internal static partial class Program
     }
     private static void AiTests(bool excel)
     {
-        System.IO.Directory.CreateDirectory("docs/v1.8");
-        using(var icon=RibbonIcons.Draw("GridPilot_AI",96))icon.Save("docs/v1.8/ai-icon.png");
+        System.IO.Directory.CreateDirectory("docs/v1.9");
+        using(var icon=RibbonIcons.Draw("GridPilot_AI",96))icon.Save("docs/v1.9/ai-icon.png");
         Check(!new ToolPreferences{AiEnabled=false}.IsEnabled("GridPilot_AI"),"AI can be disabled");
         Check(AiRange.Parse("XFD1048576").Size==1,"maximum Excel address valid");
         foreach(string address in new[]{"XFE1","A1048577","A0","A:A","[other]A1"}){bool bad=false;try{AiRange.Parse(address);}catch(InvalidOperationException){bad=true;}Check(bad,"reject invalid range "+address);}
@@ -181,6 +183,7 @@ internal static partial class Program
                 var end=JObject.FromObject(ai.Read(new JObject{["snapshotId"]=(string)entire["snapshotId"],["operation"]="find",["query"]="42",["comparison"]="equals",["column"]=16384}));
                 Check((string)end["cells"][0]["address"]=="XFD1048576","sparse full-sheet capture includes final cell");
                 AiBatchTests(ai,app,sheet,(string)entire["snapshotId"]);
+                AiProtectionTests(app);
                 book.Close(false);
                 bool closed = false; try { ai.Read(new JObject { ["snapshotId"] = id, ["operation"] = "read" }); } catch (InvalidOperationException) { closed = true; }
                 Check(closed, "closed workbook invalidates snapshots");

@@ -24,6 +24,7 @@ const modelServer=http.createServer((req,res)=>{
 });
 const capture={snapshotId,book:'合成销售.xlsx',scope:'selection',capturedAt:new Date().toISOString(),excelVersion:'16.0',ranges:[{sheet:'销售',address:'A1:C4'}],scannedCells:12,nonEmptyCells:10,sample:[{sheet:'销售',address:'B2',value:10,formula:null}],statistics:{sum:60,numericCount:3}};
 function respond(m){
+  if(m.action==='aiCheckpoint'||m.action==='aiApproval')return {automatic:!!m.enabled,available:false};
   if(m.action==='aiReady')return {mode:'window',version:'1.20.3'};
   if(m.action==='aiContext')return {available:true,book:'合成销售.xlsx',sheet:'销售',selection:'A1:C4'};
   if(m.action==='aiCapture'){captured++;return {...capture,scope:m.scope};}
@@ -86,10 +87,11 @@ const server=net.createServer(s=>{
     mcpClient=new Client({name:'GridPilot-test',version:'1.0.0'});
     await mcpClient.connect(new StdioClientTransport({...bridge.transport,stderr:'pipe'}));
     const rpc=async(method,params={})=>({result:method==='tools/list'?await mcpClient.listTools():await mcpClient.callTool(params)});
-    const list=await rpc('tools/list');assert.equal(list.result.tools.length,9);assert(!list.result.tools.some(t=>/apply|undo/.test(t.name)));
+    const list=await rpc('tools/list');assert.equal(list.result.tools.length,10);assert(!list.result.tools.some(t=>/apply|undo/.test(t.name)));
     const proposed=await rpc('tools/call',{name:'excel_propose_formula',arguments:{snapshotId,sheet:'销售',address:'D2',formula:'=SUM(B2:B4)'}});
     assert(!proposed.result.isError);assert.equal(applied,0);
     await page.locator('#gridpilot-excel').getByText('=SUM(B2:B4)',{exact:true}).waitFor({state:'attached'});
+    assert(await page.getByRole('button',{name:'一键应用',exact:true}).count(),'Apply is accessible outside native modals');
     console.log('Proposal DOM:',await page.locator('#gridpilot-excel').evaluate(e=>({text:e.textContent,details:[...e.querySelectorAll('details')].map(d=>d.open)})));
     await page.screenshot({path:path.join(root,'.temp/ai-proposal-inspect.png')});
     await page.locator('#gridpilot-excel button').filter({hasText:'一键应用'}).click();assert.equal(applied,1);
@@ -126,11 +128,11 @@ const server=net.createServer(s=>{
     await page.waitForTimeout(300);
     assert(modelRequests.some(r=>JSON.stringify(r.messages).includes('GridPilot PDF attachment verification')),'native model receives parsed PDF text');
     console.log('PASS native TXT/PDF/DOCX parsing, Unicode picker path, PDF message through Chatbox provider');
-    fs.mkdirSync(path.join(root,'docs/v1.8'),{recursive:true});
-    await page.screenshot({animations:'disabled',path:path.join(root,'docs/v1.8/chatbox-window.png')});
+    fs.mkdirSync(path.join(root,'docs/v1.9'),{recursive:true});
+    await page.screenshot({animations:'disabled',path:path.join(root,'docs/v1.9/chatbox-window.png')});
     await application.evaluate(({BrowserWindow})=>{const w=BrowserWindow.getAllWindows()[0];w.setSize(480,850);w.webContents.send('gridpilot:mode','sidebar');});
     await page.waitForFunction(()=>document.getElementById('gridpilot-excel')?.dataset.mode==='sidebar');
-    await page.screenshot({animations:'disabled',path:path.join(root,'docs/v1.8/chatbox-narrow.png')});
+    await page.screenshot({animations:'disabled',path:path.join(root,'docs/v1.9/chatbox-narrow.png')});
     const overflow=await page.locator('#gridpilot-excel').evaluate(e=>e.scrollWidth>e.clientWidth+2);assert.equal(overflow,false);
     await application.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].setSize(1100,850));
     await application.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].webContents.send('navigate-to','/settings/provider'));
@@ -138,7 +140,7 @@ const server=net.createServer(s=>{
     await page.getByText('API 密钥',{exact:true}).waitFor();
     await page.waitForTimeout(400); // Native modal transition, before the documentation screenshot.
     console.log('Native settings:',(await page.locator('body').innerText()).slice(-1500));
-    await page.screenshot({animations:'disabled',path:path.join(root,'docs/v1.8/chatbox-settings.png')});
+    await page.screenshot({animations:'disabled',path:path.join(root,'docs/v1.9/chatbox-settings.png')});
     assert.deepEqual(errors,[]);
     console.log('PASS official native UI, Chinese draft, context opt-out, full-scope MCP, stdio transport, proposal/apply/undo, narrow layout');
   }finally{if(mcpClient)await mcpClient.close();if(application)await application.close();socket?.destroy();server.close();modelServer.close();}

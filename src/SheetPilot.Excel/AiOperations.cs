@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Text;
+using System.Threading.Tasks;
 using Newtonsoft.Json;
 using System.Collections.Generic;
 using System.Linq;
@@ -18,6 +19,7 @@ namespace SheetPilot.Excel
         private readonly Queue<string> snapshotOrder = new Queue<string>();
         private readonly Dictionary<string, Proposal> proposals = new Dictionary<string, Proposal>();
         private Proposal[] undo;
+        private bool disposed;
         private sealed class Cell
         {
             public string sheet, address, formula;
@@ -44,7 +46,7 @@ namespace SheetPilot.Excel
             public string kind, chartName;
             public JObject style, beforeStyle, afterStyle;
             public Edit[] edits;
-            public object sourceFormula;
+            public object sourceFormula,afterSourceFormula;
             public JObject options, chartState;
         }
         public AiOperations(Func<object> application) { this.application = application; }
@@ -73,55 +75,71 @@ namespace SheetPilot.Excel
             catch { return new { available = false }; }
             finally { Release(selection); Release(sheet); Release(book); }
         }
-        public object Capture(string scope)
+        public object Capture(string scope) => CaptureAsync(scope).GetAwaiter().GetResult();
+        public Action<string,int,long,long> Progress { get; set; }
+        public Func<Task> YieldCapture { get; set; }
+        public volatile bool CancelCapture;
+        private async Task CaptureStep(Snapshot snapshot, string sheet)
         {
+            Progress?.Invoke("正在读取 " + sheet, 0, snapshot.count, 0);
+            if (YieldCapture != null) await YieldCapture();
+            if(CancelCapture||disposed)throw new OperationCanceledException("已取消，未向模型发送 Excel 数据。");
+        }
+        public async Task<object> CaptureAsync(string scope)
+        {
+            CancelCapture=false;
             if (scope != "selection" && scope != "sheet" && scope != "workbook")
                 throw new InvalidOperationException("请选择选区、当前工作表或当前工作簿。");
             dynamic app = application(); object book = app.ActiveWorkbook;
             if (book == null) throw new InvalidOperationException("请先打开工作簿。");
             var snapshot = new Snapshot { id = Guid.NewGuid().ToString("N"), scope = scope, book = book, bookName = (string)((dynamic)book).Name };
-            object active = null, sheets = null;
+            object active = app.ActiveSheet, sheets = null, selected = scope == "selection" ? app.Selection : null;
+            var changes=new ExcelEvents((object)app);bool changed=false;
             try
             {
+                changes.Change(()=>changed=true);
                 if (scope == "workbook")
                 {
                     sheets = ((dynamic)book).Worksheets;
                     for (int i = 1; i <= (int)((dynamic)sheets).Count; i++)
                     {
                         object sheet = ((dynamic)sheets).Item[i];
-                        try { if ((int)((dynamic)sheet).Visible == -1) CaptureSheet(snapshot, sheet, null); }
+                        try { if ((int)((dynamic)sheet).Visible == -1) await CaptureSheet(snapshot, sheet, null); }
                         finally { Release(sheet); }
                     }
                 }
                 else
                 {
-                    active = app.ActiveSheet;
                     if (Microsoft.VisualBasic.Information.TypeName(active).TrimStart('_') != "Worksheet")
                         throw new InvalidOperationException("请切换到普通工作表。");
-                    object selection = scope == "selection" ? app.Selection : null;
-                    try { CaptureSheet(snapshot, active, selection); } finally { Release(selection); }
+                    await CaptureSheet(snapshot, active, selected);
                 }
                 // Expire before retaining new COM references. Old chat messages remain readable,
                 // but tools must ask for a fresh snapshot rather than resolve by workbook name.
-                if (snapshots.Count >= 8)
+                if (snapshotOrder.Count >= 8)
                 {
                     string oldest = snapshotOrder.Dequeue();
-                    snapshots[oldest].Dispose(); snapshots.Remove(oldest);
+                    if (undo?.Any(p=>p.snapshot==oldest)!=true) { snapshots[oldest].Dispose(); snapshots.Remove(oldest); }
                     foreach (var key in proposals.Where(p => p.Value.snapshot == oldest).Select(p => p.Key).ToArray()) proposals.Remove(key);
-                    if (undo?.Any(p=>p.snapshot==oldest)==true) undo = null;
+
                 }
+                Progress?.Invoke("正在整理上下文", 95, snapshot.count, snapshot.count);
+                if(YieldCapture != null) await YieldCapture();
+                var statistics = await Task.Run(() => Statistics(snapshot.cells));
+                if(CancelCapture||disposed)throw new OperationCanceledException("已取消，未发送 Excel 数据。");
+                if(changed)throw new InvalidOperationException("读取期间工作簿发生编辑，本次未发送。请完成编辑后重试。");
                 snapshots.Add(snapshot.id, snapshot);
                 snapshotOrder.Enqueue(snapshot.id);
                 return new { snapshotId = snapshot.id, book = snapshot.bookName, scope, capturedAt = DateTime.UtcNow.ToString("o"),
                     excelVersion = (string)app.Version, ranges = snapshot.ranges, scannedCells = snapshot.scanned,
                     nonEmptyCells = snapshot.count, hiddenCellsIncluded = true, hiddenSheetsIncluded = false,
                     sample = snapshot.cells.Take(120).ToArray(), sampleTruncated = snapshot.count > 120,
-                    statistics = Statistics(snapshot.cells), note = "数据是发送时的快照；查找和统计覆盖全部已扫描范围，sample 只是前120个非空单元格。空白单元格不列在cells中。" };
+                    statistics, note = "数据是发送时的快照；查找和统计覆盖全部已扫描范围，sample 只是前120个非空单元格。空白单元格不列在cells中。" };
             }
             catch { snapshot.Dispose(); throw; }
-            finally { Release(active); Release(sheets); }
+            finally { changes.Dispose();Release(selected);Release(active);Release(sheets); }
         }
-        private void CaptureSheet(Snapshot snapshot, dynamic sheet, object selection)
+        private async Task CaptureSheet(Snapshot snapshot, dynamic sheet, object selection)
         {
             object used = null, areas = null, intersection = null;
             try
@@ -135,7 +153,7 @@ namespace SheetPilot.Excel
                     {
                         // Preserve a blank destination as context without scanning whole rows.
                         object first = ((dynamic)selection).Cells[1, 1];
-                        try { CaptureBlock(snapshot, sheet, first); } finally { Release(first); }
+                        try { await CaptureBlock(snapshot, sheet, first); } finally { Release(first); }
                         return;
                     }
                 }
@@ -143,12 +161,12 @@ namespace SheetPilot.Excel
                 for (int i = 1; i <= (int)((dynamic)areas).Count; i++)
                 {
                     object block = ((dynamic)areas).Item[i];
-                    try { CaptureBlock(snapshot, sheet, block); } finally { Release(block); }
+                    try { await CaptureBlock(snapshot, sheet, block); } finally { Release(block); }
                 }
             }
             finally { Release(areas); Release(intersection); Release(used); }
         }
-        private void CaptureBlock(Snapshot snapshot, dynamic sheet, dynamic range)
+        private async Task CaptureBlock(Snapshot snapshot, dynamic sheet, dynamic range)
         {
             object rows = null, columns = null;
             try
@@ -173,7 +191,7 @@ namespace SheetPilot.Excel
                             // Enumerate matching cells rather than silently losing that data.
                             if(cellType==-4123 && Equals(range.HasFormula,false))continue;
                             if(cellType==2 && Equals(range.HasFormula,true))continue;
-                            CaptureByFind(snapshot,sheet,range,cellType);continue;
+                            await CaptureByFind(snapshot,sheet,range,cellType);continue;
                         }
                         dynamic app=application();clipped=app.Intersect(range,populated);if(clipped==null)continue;
                         parts=((dynamic)clipped).Areas;
@@ -200,6 +218,7 @@ namespace SheetPilot.Excel
                                             snapshot.Add(new Cell{sheet=name,row=top+offset+r,column=left+c,error=isError,address=Address(top+offset+r,left+c),value=isError?ErrorText(value):value,formula=cellType==-4123?Convert.ToString(formula):null});
                                         }
                                     }finally{Release(chunk);}
+                                    await CaptureStep(snapshot,name);
                                 }
                             }finally{Release(pc);Release(pr);Release(part);}
                         }
@@ -208,7 +227,7 @@ namespace SheetPilot.Excel
             }
             finally { Release(rows); Release(columns); }
         }
-        private void CaptureByFind(Snapshot snapshot,dynamic sheet,dynamic range,int cellType)
+        private async Task CaptureByFind(Snapshot snapshot,dynamic sheet,dynamic range,int cellType)
         {
             object cell=null;
             try
@@ -225,6 +244,7 @@ namespace SheetPilot.Excel
                         object value=found.Value2;bool error=value is ErrorWrapper||value is int code&&(code&unchecked((int)0xFFFF0000))==unchecked((int)0x800A0000);
                         snapshot.Add(new Cell{sheet=(string)sheet.Name,address=address,row=(int)found.Row,column=(int)found.Column,value=error?ErrorText(value):value,error=error,formula=hasFormula?(string)found.Formula:null});
                     }
+                    if(snapshot.count % 256 == 0) await CaptureStep(snapshot,(string)sheet.Name);
                     object next=range.FindNext(cell);Release(cell);cell=next;
                 }
             }finally{Release(cell);}
@@ -295,7 +315,7 @@ namespace SheetPilot.Excel
                 formula.IndexOfAny(new[] { '\r', '\n', '\0', '|' }) >= 0 ||
                 Regex.IsMatch(formula,@"\[[^\]]*\.(?:xlsx?|xlsm|xlsb|csv)\]") ||
                 Regex.IsMatch(formula, @"(?i)(?:WEBSERVICE|HYPERLINK|RTD|CALL|REGISTER(?:\.ID)?|EXEC|EVALUATE)\s*\("))
-                throw new InvalidOperationException("公式无效，或包含外部链接、执行/网络函数。");
+                throw new InvalidOperationException("公式必须以 = 开头，例如 =SUM(B2:B10)；使用 Excel 版本支持的英文函数名及逗号分隔参数，禁止外部链接和网络/执行函数。");
         }
         private static void ValidateAddress(string address)
         {
@@ -315,6 +335,6 @@ namespace SheetPilot.Excel
             }
             finally { Release(range); Release(sheet); Release(sheets); }
         }
-        public void Dispose() { foreach (var snapshot in snapshots.Values) snapshot.Dispose(); snapshots.Clear(); snapshotOrder.Clear(); proposals.Clear(); undo = null; }
+        public void Dispose() { disposed=true;CancelCapture=true;foreach (var snapshot in snapshots.Values) snapshot.Dispose(); snapshots.Clear(); snapshotOrder.Clear(); proposals.Clear(); undo = null; }
     }
 }

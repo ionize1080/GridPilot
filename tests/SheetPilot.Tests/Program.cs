@@ -22,6 +22,7 @@ internal static partial class Program
     {
         try
         {
+            if(args.Length>0 && args[0]=="--ai-live-bridge"){AiLiveBridge();return 0;}
             if(args.Length>1 && args[0]=="--ai-ui"){AiUiLaunch(Path.GetFullPath(args[1]));return 0;}
             if(args.Length>2 && args[0]=="--ai-installed"){AiHostTest(Path.GetFullPath(args[1]),int.Parse(args[2]),true);Console.WriteLine("PASS "+checks+" assertions");return 0;}
             if(args.Length>2 && args[0]=="--ai-host"){AiHostTest(Path.GetFullPath(args[1]),int.Parse(args[2]));Console.WriteLine("PASS "+checks+" assertions");return 0;}

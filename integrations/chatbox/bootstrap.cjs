@@ -13,7 +13,7 @@ const socket = net.createConnection('\\\\.\\pipe\\'+pipe), pending = new Map();
 let sequence=0, primary,displayMode='window';
 function applyMode(mode){
   displayMode=mode;if(!primary)return;
-  const docked=mode==='sidebar';primary.setSkipTaskbar(docked);primary.setMovable(!docked);primary.setMaximizable(!docked);primary.setMinimizable(!docked);
+  const docked=mode==='sidebar';primary.setHasShadow(!docked);primary.setSkipTaskbar(docked);primary.setMovable(!docked);primary.setMaximizable(!docked);primary.setMinimizable(!docked);
   primary.webContents.send('gridpilot:mode',mode);
 }
 const token=crypto.randomBytes(32).toString('hex');
@@ -25,12 +25,12 @@ function host(message) {
   });
 }
 readline.createInterface({input:socket}).on('line',line=>{
-  try {const m=JSON.parse(line);if(m.type==='mode'){applyMode(m.mode);return;}if(m.type==='activate'){primary?.show();primary?.focus();return;}const p=pending.get(m.id);if(!p)return;clearTimeout(p.timer);pending.delete(m.id);m.error?p.reject(Error(m.error)):p.resolve(m.data);}catch{}
+  try {const m=JSON.parse(line);if(m.type==='progress'){primary?.webContents.send('gridpilot:progress',m);return;}if(m.type==='mode'){applyMode(m.mode);return;}if(m.type==='activate'){primary?.show();primary?.focus();return;}const p=pending.get(m.id);if(!p)return;clearTimeout(p.timer);pending.delete(m.id);m.error?p.reject(Error(m.error)):p.resolve(m.data);}catch{}
 });
 function disconnect(){for(const p of pending.values()){clearTimeout(p.timer);p.reject(Error('Excel已关闭。'));}pending.clear();app.exit(0);}
 socket.on('close',disconnect);socket.on('error',disconnect);
 function publish(data){primary?.webContents.send('gridpilot:result',data);}
-const allowed=new Set(['aiContext','aiCapture','aiRead','aiPropose','aiApply','aiUndo','aiNavigate','aiApplyBatch','aiMode']);
+const allowed=new Set(['aiContext','aiCapture','aiRead','aiPropose','aiApply','aiUndo','aiNavigate','aiApplyBatch','aiMode','aiApproval','aiCheckpoint','aiRestore','aiOpenRecovery','cancel']);
 ipcMain.handle('gridpilot:request',async(event,message)=>{
   if(!primary || event.sender!==primary.webContents || event.senderFrame!==primary.webContents.mainFrame ||
      !event.senderFrame.url.startsWith('file:') || !allowed.has(message?.action) || JSON.stringify(message).length>8*1024*1024)
@@ -79,7 +79,7 @@ ipcMain.handle=(channel,listener)=>{
 };
 app.on('browser-window-created',(_event,window)=>{
   if(primary)return;primary=window;
-  window.setMinimumSize(320,240);
+  window.setBackgroundColor('#ffffff');window.setMinimumSize(320,240);
   window.webContents.on('will-navigate',(event,url)=>{if(!url.startsWith('file:'))event.preventDefault();});
   window.once('ready-to-show',async()=>{
     try{
