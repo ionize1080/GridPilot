@@ -36,8 +36,11 @@ patch('dist/renderer/js/index.TlLbGKvw.js',
 patch('dist/renderer/js/InputBox.DH3jG147.js',
   'rr.knowledgeBase&&!M&&o.jsx(Bo,{currentKnowledgeBaseId:de?.id,onSelect:nn,',
   'o.jsx("span",{id:"gridpilot-toolbar-slot"}),rr.knowledgeBase&&!M&&o.jsx(Bo,{currentKnowledgeBaseId:de?.id,onSelect:nn,');
+patch('dist/renderer/js/InputBox.DH3jG147.js',
+  'onClick:()=>{$e(!ye),Ye()},className:',
+  'id:"gridpilot-native-web-search","data-enabled":String(ye),onClick:()=>{$e(!ye),Ye()},className:');
 patch('dist/renderer/js/index.TlLbGKvw.js','function getToolName(eu){return{',
-  'function getToolName(eu){const names={excel_read:"读取单元格",excel_find:"查找数据",excel_statistics:"统计数据",excel_inspect:"检查工作簿",excel_propose_formula:"写入公式",excel_propose_values:"写入内容",excel_propose_formulas:"写入批量公式",excel_propose_format:"调整格式",excel_propose_chart:"生成图表",excel_propose_pivot:"生成透视表"};if(eu.startsWith("mcp__gridpilot_excel__")){const label=names[eu.slice("mcp__gridpilot_excel__".length)];if(label)return "Excel · "+label;}return{');
+  'function getToolName(eu){const names={excel_help:"查询操作说明",excel_operation:"操作 Excel",excel_read:"读取单元格",excel_find:"查找数据",excel_statistics:"统计数据",excel_inspect:"检查工作簿",excel_propose_formula:"写入公式",excel_propose_values:"写入内容",excel_propose_formulas:"写入批量公式",excel_propose_format:"调整格式",excel_propose_chart:"生成图表",excel_propose_pivot:"生成透视表"};if(eu.startsWith("mcp__gridpilot_excel__")){const label=names[eu.slice("mcp__gridpilot_excel__".length)];if(label)return "Excel · "+label;}return{');
 const renderer=path.join(native,'dist/renderer/js/index.TlLbGKvw.js');
 const rendererBefore=hash(renderer);
 fs.appendFileSync(renderer,'\nObject.defineProperty(window.File.prototype,"path",{configurable:true,get(){return window.gridpilotExcel.filePath(this);}});\nwindow.addEventListener("gridpilot:sidebar",()=>uiStore.getState().setShowSidebar(false));\n');
@@ -61,7 +64,7 @@ patches.push({file:'dist/renderer/js/index.TlLbGKvw.js',originalSha256:readiness
 const preload=path.join(native,'dist/preload/index.js'),original=hash(preload);
 fs.appendFileSync(preload,'\n'+fs.readFileSync(path.join(__dirname,'preload.cjs'),'utf8'));
 patches.push({file:'dist/preload/index.js',originalSha256:original,patchedSha256:hash(preload),append:'integrations/chatbox/preload.cjs'});
-for(const name of ['bootstrap.cjs','tools.cjs','stdio.cjs','LICENSE-GPL-3.0.txt'])fs.copyFileSync(path.join(__dirname,name),path.join(out,name));
+for(const name of ['bootstrap.cjs','tools.cjs','catalog.cjs','stdio.cjs','LICENSE-GPL-3.0.txt'])fs.copyFileSync(path.join(__dirname,name),path.join(out,name));
 fs.cpSync(path.join(__dirname,'node_modules'),path.join(out,'node_modules'),{recursive:true});
 fs.cpSync(path.join(extracted,'resources/app.asar.unpacked'),path.join(out,'resources/app.asar.unpacked'),{recursive:true});
 fs.writeFileSync(path.join(out,'package.json'),JSON.stringify({name:packageData.name,productName:packageData.productName,version:'1.20.3',private:true,main:'bootstrap.cjs'}));

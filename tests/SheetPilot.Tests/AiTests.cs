@@ -134,8 +134,8 @@ internal static partial class Program
     }
     private static void AiTests(bool excel)
     {
-        System.IO.Directory.CreateDirectory("docs/v1.9.1");
-        using(var icon=RibbonIcons.Draw("GridPilot_AI",96))icon.Save("docs/v1.9.1/ai-icon.png");
+        System.IO.Directory.CreateDirectory("docs/v2.0");
+        using(var icon=RibbonIcons.Draw("GridPilot_AI",96))icon.Save("docs/v2.0/ai-icon.png");
         Check(!new ToolPreferences{AiEnabled=false}.IsEnabled("GridPilot_AI"),"AI can be disabled");
         Check(AiRange.Parse("XFD1048576").Size==1,"maximum Excel address valid");
         foreach(string address in new[]{"XFE1","A1048577","A0","A:A","[other]A1"}){bool bad=false;try{AiRange.Parse(address);}catch(InvalidOperationException){bad=true;}Check(bad,"reject invalid range "+address);}

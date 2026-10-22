@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using Newtonsoft.Json.Linq;
@@ -92,11 +92,11 @@ namespace SheetPilot.Excel
                 else throw new InvalidOperationException("未知的建议类型。");
                 proposals.Add(p.id,p);
                 bool applied = AutomaticFor(snapshot.book);
-                if (applied) { try { ApplyBatch(new[] { p.id }); } catch { if(CurrentApproval()?.scope!="workbook")automatic=false; throw; } }
+                if (applied) { try { ApplyBatch(new[] { p.id }, false, false); } catch { if(CurrentApproval()?.scope!="workbook")automatic=false; throw; } }
                 return new{proposalId=p.id,snapshotId=p.snapshot,book=snapshot.bookName,sheet=name,address,kind,formula=p.formula,data=request["data"],style=p.style,title=request["title"],before=p.edits?.Take(6).Select(e=>e.beforeFormula).ToArray(),count=p.edits?.LongLength??bounds.Size,applied,checkpoint=CheckpointState(),status=applied?"已自动应用；已保留变更前后快照。":"待一键应用，尚未写入 Excel。"};
             }finally{Release(range);Release(sheet);}
         }
-        private static readonly Dictionary<string,int> ChartTypes=new Dictionary<string,int>{{"column",51},{"bar",57},{"line",4},{"pie",5},{"scatter",-4169},{"area",1}};
+        private static readonly Dictionary<string,int> ChartTypes=Excel2010Charts;
         private static readonly string[] StyleKeys={"bold","italic","font_size","font_color","fill_color","number_format","horizontal_alignment","wrap_text"};
         private static void ValidateStyle(JObject style)
         {
@@ -277,13 +277,24 @@ namespace SheetPilot.Excel
             return result.OrderBy(p=>p.edits!=null?0:p.kind=="format"?1:2).ThenBy(p=>p.sequence).ToArray();
         }
         private static bool RangesOverlap(AiRange a,AiRange b) => a.Row<=b.LastRow&&b.Row<=a.LastRow&&a.Column<=b.LastColumn&&b.Column<=a.LastColumn;
-        public object ApplyBatch(string[] ids,bool revert=false)
+        public object ApplyBatch(string[] ids,bool revert=false,bool manual=true)
         {
             if(revert)return RestoreCheckpoint(true);
             Proposal[] batch;
                 if(ids==null||ids.Length==0||ids.Distinct().Count()!=ids.Length)throw new InvalidOperationException("请选择待应用的建议。");
                 var valid=ids.Where(id=>id!=null&&proposals.ContainsKey(id)).Select(id=>proposals[id]).ToArray();
                 if(valid.Length==0)return new{message="待应用建议已过期，已清理；请重新生成。",appliedIds=new string[0],retiredIds=ids,checkpoint=CheckpointState()};
+                if(valid.Any(p=>p.kind=="extended")) {
+                    var advanced=valid.Where(p=>p.kind=="extended").OrderBy(p=>p.sequence).ToArray();
+                    var basic=valid.Where(p=>p.kind!="extended").ToArray();
+                    if(basic.Length==0)return ApplyExtended(advanced,manual);
+                    // Check both groups before any write; earlier writes in this same
+                    // approved batch must not be mistaken for intervening user edits.
+                    CheckExtended(advanced,manual);foreach(var p in ResolveBatch(basic))CheckProposal(p,false);
+                    var first=JObject.FromObject(ApplyBatch(basic.Select(p=>p.id).ToArray(),false,manual));
+                    try{var second=JObject.FromObject(ApplyExtended(advanced,manual,true));return new{message="已应用整批并保留完整历史快照。",appliedIds=first["appliedIds"].Concat(second["appliedIds"]).ToArray(),retiredIds=ids,checkpoint=CheckpointState()};}
+                    catch(Exception ex){throw new InvalidOperationException("基础建议已完成："+string.Join(",",basic.Select(p=>p.id))+"。高级操作："+ex.Message,ex);}
+                }
                 batch=ResolveBatch(valid);
             foreach(var p in batch)CheckProposal(p,revert);
             bool batchAutomatic=batch.All(p=>AutomaticFor(Get(p.snapshot).book));

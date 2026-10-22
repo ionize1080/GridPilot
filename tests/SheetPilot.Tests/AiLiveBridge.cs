@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Text;
 using System.Runtime.InteropServices;
 using Newtonsoft.Json;
@@ -36,7 +36,10 @@ internal static partial class Program
                             case "aiContext":result=ai.Context();break;
                             case "aiCapture":result=ai.Capture((string)m["scope"]);break;
                             case "aiRead":result=ai.Read(m);break;
-                            case "aiInspect":result=ai.Metadata((string)m["snapshotId"]);break;
+                            case "aiExtended": result=ai.Extended(m);break;
+                        case "aiHistory": result=ai.SnapshotHistory();break;
+                        case "aiOpenVersion": result=ai.OpenVersion((string)m["versionId"]);break;
+                        case "aiInspect":result=ai.Metadata((string)m["snapshotId"]);break;
                             case "aiPropose":result=ai.Propose(m);break;
                             case "aiApplyBatch":result=ai.ApplyBatch(m["proposalIds"].ToObject<string[]>());break;
                             case "aiApproval":result=ai.Approval((bool)m["enabled"],(string)m["scope"]??"session");break;
@@ -57,6 +60,6 @@ internal static partial class Program
                 }
             }
         }
-        finally {if(book!=null){try{book.Close(false);}catch{}Marshal.ReleaseComObject(book);}if(app!=null){try{app.Quit();}catch{}Marshal.ReleaseComObject(app);}}
+        finally {if(book!=null){try{book.Close(false);}catch{}Marshal.ReleaseComObject((object)book);}if(app!=null){try{app.Quit();}catch{}Marshal.ReleaseComObject((object)app);}}
     }
 }

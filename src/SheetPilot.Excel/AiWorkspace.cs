@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
@@ -17,6 +17,13 @@ namespace SheetPilot.Excel
         [StructLayout(LayoutKind.Sequential)] private struct WindowRect { public int left,top,right,bottom; }
         private WindowRect floatingBounds;
         [DllImport("user32.dll")] private static extern bool GetWindowRect(IntPtr hwnd,out WindowRect rect);
+        [DllImport("user32.dll")] private static extern bool GetClientRect(IntPtr hwnd,out WindowRect rect);
+        [DllImport("user32.dll")] private static extern bool ClientToScreen(IntPtr hwnd,ref System.Drawing.Point point);
+        [DllImport("gdi32.dll")] private static extern IntPtr CreateRectRgn(int left,int top,int right,int bottom);
+        [DllImport("gdi32.dll")] private static extern bool DeleteObject(IntPtr handle);
+        [DllImport("user32.dll")] private static extern int SetWindowRgn(IntPtr hwnd,IntPtr region,bool redraw);
+        [StructLayout(LayoutKind.Sequential)] private struct FrameMargins { public int left,right,top,bottom; }
+        [DllImport("dwmapi.dll")] private static extern int DwmExtendFrameIntoClientArea(IntPtr hwnd,ref FrameMargins margins);
         [DllImport("dwmapi.dll")] private static extern int DwmSetWindowAttribute(IntPtr hwnd,int attribute,ref int value,int size);
         private static void SetFrame(IntPtr hwnd, bool docked) { int policy=docked?1:0; DwmSetWindowAttribute(hwnd,2,ref policy,4); }
         private readonly Timer tracking=new Timer{Interval=120};
@@ -48,11 +55,14 @@ namespace SheetPilot.Excel
             owner=GetAncestor(Handle,2);Owner(child,owner);
             SetWindowLong(child,-16,(originalStyle & ~0x00C40000 & ~0x40000000)|unchecked((int)0x80000000));
             SetWindowLong(child,-20,originalExtendedStyle & ~0x00000301);SetFrame(child,true);
+            var margins=new FrameMargins();DwmExtendFrameIntoClientArea(child,ref margins);
+            SetWindowPos(child,IntPtr.Zero,0,0,0,0,0x37); // Recalculate non-client metrics before measuring.
             lastBounds=System.Drawing.Rectangle.Empty;Fit();tracking.Start();
         }
         internal void Detach()
         {
             tracking.Stop();if(child==IntPtr.Zero)return;
+            SetWindowRgn(child,IntPtr.Zero,true);
             Owner(child,IntPtr.Zero);SetWindowLong(child,-16,originalStyle);SetWindowLong(child,-20,originalExtendedStyle);SetFrame(child,false);
             var window=child;child=IntPtr.Zero;
             SetWindowPos(window,IntPtr.Zero,floatingBounds.left,floatingBounds.top,Math.Max(320,floatingBounds.right-floatingBounds.left),Math.Max(240,floatingBounds.bottom-floatingBounds.top),0x34);ShowWindow(window,4);
@@ -63,7 +73,20 @@ namespace SheetPilot.Excel
             if(!Visible||!IsWindowVisible(Handle)||IsIconic(owner)){ShowWindow(child,0);return;}
             var bounds=RectangleToScreen(ClientRectangle);
             if(bounds.Width<20||bounds.Height<20){ShowWindow(child,0);return;}
-            if(bounds!=lastBounds){SetWindowPos(child,IntPtr.Zero,bounds.X,bounds.Y,bounds.Width,bounds.Height,0x34);lastBounds=bounds;}
+            if(bounds!=lastBounds){
+                // Excel 2010/Win10 can retain invisible resize/non-client margins
+                // after Electron changes the frame. Align the CLIENT area, then clip
+                // those margins; do not assume outer HWND bounds equal web content.
+                GetWindowRect(child,out var outer);GetClientRect(child,out var client);
+                var origin=new System.Drawing.Point();ClientToScreen(child,ref origin);
+                int left=origin.X-outer.left,top=origin.Y-outer.top;
+                int extraWidth=Math.Max(0,outer.right-outer.left-(client.right-client.left));
+                int extraHeight=Math.Max(0,outer.bottom-outer.top-(client.bottom-client.top));
+                SetWindowPos(child,IntPtr.Zero,bounds.X-left,bounds.Y-top,bounds.Width+extraWidth,bounds.Height+extraHeight,0x34);
+                IntPtr region=CreateRectRgn(left,top,left+bounds.Width,top+bounds.Height);
+                if(SetWindowRgn(child,region,true)==0)DeleteObject(region); // Windows owns successful region.
+                lastBounds=bounds;
+            }
             ShowWindow(child,4);
         }
         protected override void OnResize(EventArgs e){base.OnResize(e);Fit();}
@@ -152,6 +175,9 @@ namespace SheetPilot.Excel
                         case "aiContext": var state=JObject.FromObject(ai.Context());state["checkpoint"]=JToken.FromObject(ai.CheckpointState());result=state;break;
                         case "aiOpenRecovery": var recovery=(string)JObject.FromObject(ai.CheckpointState())["folder"];if(recovery==null||!Directory.Exists(recovery))throw new InvalidOperationException("尚无完整备份。");System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", "\"" + recovery + "\""){UseShellExecute=false});result=new{message="已打开本地完整备份"};break;
                         case "aiCapture": result = await ai.CaptureAsync((string)message["scope"]); break;
+                        case "aiExtended": result=ai.Extended(message);break;
+                        case "aiHistory": result=ai.SnapshotHistory();break;
+                        case "aiOpenVersion": result=ai.OpenVersion((string)message["versionId"]);break;
                         case "aiInspect": result=ai.Metadata((string)message["snapshotId"]);break;
                         case "aiRead": result = ai.Read(message); break;
                         case "aiPropose": result = ai.Propose(message); break;

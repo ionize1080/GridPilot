@@ -4,7 +4,16 @@
   <ProjectReference Include="../../src/SheetPilot.Core/SheetPilot.Core.csproj"/>
   <ProjectReference Include="../../src/SheetPilot.UI/SheetPilot.UI.csproj"/>
   <Compile Include="../../src/SheetPilot.Excel/AdvancedSortOperations.cs" Link="AdvancedSortOperations.cs" />
-  <Compile Include="../../src/SheetPilot.Excel/AiRange.cs" Link="AiRange.cs" />
+  <Compile Include="../../src/SheetPilot.Excel/AiPluginTools.cs" Link="AiPluginTools.cs" />
+<Compile Include="../../src/SheetPilot.Excel/AiExtended.cs" Link="AiExtended.cs" />
+<Compile Include="../../src/SheetPilot.Excel/AiWorkbookTools.cs" Link="AiWorkbookTools.cs" />
+<Compile Include="../../src/SheetPilot.Excel/AiRangeTools.cs" Link="AiRangeTools.cs" />
+<Compile Include="../../src/SheetPilot.Excel/AiChartTools.cs" Link="AiChartTools.cs" />
+<Compile Include="../../src/SheetPilot.Excel/AiPivotTools.cs" Link="AiPivotTools.cs" />
+<Compile Include="../../src/SheetPilot.Excel/AiObjectTools.cs" Link="AiObjectTools.cs" />
+<Compile Include="../../src/SheetPilot.Excel/VbaRisk.cs" Link="VbaRisk.cs" />
+<Compile Include="../../src/SheetPilot.Excel/WorkbookSnapshotStore.cs" Link="WorkbookSnapshotStore.cs" />
+<Compile Include="../../src/SheetPilot.Excel/AiRange.cs" Link="AiRange.cs" />
   <Compile Include="../../src/SheetPilot.Excel/AiBatch.cs" Link="AiBatch.cs" />
   <Compile Include="../../src/SheetPilot.Excel/AiCheckpoints.cs" Link="AiCheckpoints.cs" />
   <Compile Include="../../src/SheetPilot.Excel/AiPivot.cs" Link="AiPivot.cs" />

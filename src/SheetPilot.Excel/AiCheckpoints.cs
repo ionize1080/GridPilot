@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Linq;
 using System.Collections.Generic;
@@ -38,7 +38,7 @@ namespace SheetPilot.Excel
             foreach(var grant in approvals.Where(g=>g.scope=="session").ToArray()){approvals.Remove(grant);Release(grant.book);}
             return CheckpointState();
         }
-        public object CheckpointState() { var grant=CurrentApproval();return new { automatic=grant!=null, approvalScope=grant?.scope, approvalBook=grant==null?null:(string)((dynamic)grant.book).Name, available = undo != null, position = checkpointBefore ? "before" : "after", folder = checkpointFolder,
+        public object CheckpointState() { var grant=CurrentApproval();return new { automatic=grant!=null, approvalScope=grant?.scope, approvalBook=grant==null?null:(string)((dynamic)grant.book).Name, available = undo != null, position = checkpointBefore ? "before" : "after", folder = checkpointFolder, historyAvailable = historyStore != null,
             message = grant!=null ? "自动批准已开启；修改前后保存完整备份。" : "逐次批准；修改前后均保留快照。" }; }
         private string SaveCheckpoint(Proposal[] batch, string label, string folder = null)
         {
@@ -51,12 +51,10 @@ namespace SheetPilot.Excel
                 int format = Convert.ToInt32(book.FileFormat);
                 string extension = format == 52 ? ".xlsm" : format == 50 ? ".xlsb" : format == 56 || format == -4143 ? ".xls" : format == 51 ? ".xlsx" : null;
                 if (extension == null) throw new InvalidOperationException("请先把工作簿另存为 xlsx、xlsm、xlsb 或 xls，再使用 AI 写入，以便完整备份。");
-                string file = Path.Combine(folder, label + "-" + (i + 1) + extension);
-                dynamic app=application(); bool events=app.EnableEvents;
-                try { app.EnableEvents=false; book.SaveCopyAs(file); } finally { app.EnableEvents=events; }
-                if (!File.Exists(file) || new FileInfo(file).Length == 0) throw new IOException("工作簿备份未完成，未继续修改。");
+                string version = SaveVersion((object)book, label);
+                File.WriteAllText(Path.Combine(folder,label+"-"+(i+1)+".snapshot.json"),new JObject{["versionId"]=version,["store"]=History.Root}.ToString());
             }
-            File.WriteAllText(Path.Combine(folder,"README.txt"),"GridPilot 本地完整工作簿备份\r\nbefore-* 为本次修改前；after-* 为各次成功修改后的完整副本，按修改时间选择。\r\n界面切换仅还原 AI 触及的范围或对象；关闭助手后可直接打开这些文件手工恢复。\r\n备份含工作簿原始数据，请自行保管；不会上传至模型或 GitHub。\r\n");
+            File.WriteAllText(Path.Combine(folder,"README.txt"),"GridPilot 本地完整工作簿备份\r\nbefore-* / after-* 为历史快照引用；可在助手历史快照中打开完整副本。\r\n界面切换仅还原 AI 触及的范围或对象；数据保存在 history-v2，关闭助手后仍可在历史快照中恢复。\r\n备份含工作簿原始数据，请自行保管；不会上传至模型或 GitHub。\r\n");
             return folder;
         }
         private Proposal[] CombineCheckpoint(Proposal[] batch)

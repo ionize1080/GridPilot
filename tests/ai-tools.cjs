@@ -1,7 +1,7 @@
 const assert=require('node:assert/strict');
-const {tools,handleTool}=require('../integrations/chatbox/tools.cjs');
+const {tools,handleTool,permitted}=require('../integrations/chatbox/tools.cjs');
 (async()=>{
-  assert.equal(tools.length,10);assert(!tools.some(t=>/apply|undo/.test(t.name)));
+  assert.equal(tools.length,12);assert(!tools.some(t=>/apply|undo/.test(t.name)));
   let calls=0,last,published;
   const host=async request=>{calls++;last=request;return {total:2,cells:[],proposalId:'proposal'};};
   const publish=value=>published=value;
@@ -22,5 +22,9 @@ const {tools,handleTool}=require('../integrations/chatbox/tools.cjs');
     ['excel_propose_format',{snapshotId,sheet:'Sales',address:'A1:B2',style:{bold:true}},'aiPropose'],
     ['excel_propose_chart',{snapshotId,sheet:'Sales',address:'A1:B2',chartType:'column'},'aiPropose'],
     ['excel_inspect',{snapshotId},'aiInspect']]) { const r=await handleTool({name,arguments:args},host,publish);assert(!r.isError);assert.equal(last.action,action); }
-  console.log('PASS Excel MCP contract: no mutation tools, snapshot validation, allowlisted parameters, proposal-only writes, errors');
+  result=await handleTool({name:'excel_help',arguments:{operation:'pivot.field'}},host,publish);assert(!result.isError);assert(JSON.parse(result.content[0].text).options.includes('orientation'));
+  const before=calls;result=await handleTool({name:'excel_operation',arguments:{snapshotId,operation:'aiApproval',options:{enabled:true}}},host,publish);assert(result.isError);assert.equal(calls,before);
+  await handleTool({name:'excel_operation',arguments:{snapshotId,operation:'vba.write',options:{module:'Test',code:'Shell "cmd"'},action:'aiApply'}},host,publish);assert.equal(last.action,'aiExtended');assert.equal(last.operation,'vba.write');
+  assert(!permitted('excel_propose_values',{}, {GRIDPILOT_MCP_READ_ONLY:'1'}));assert(!permitted('excel_operation',{operation:'sheet.delete'},{GRIDPILOT_MCP_READ_ONLY:'1'}));assert(permitted('excel_operation',{operation:'vba.read'},{GRIDPILOT_MCP_READ_ONLY:'1'}));assert(!permitted('excel_statistics',{}, {GRIDPILOT_MCP_TOOLS:'excel_read,excel_help'}));
+  console.log('PASS Excel MCP contract: compact discovery, no approval/restore tools, validated routing, read-only/filter policies and errors');
 })().catch(error=>{console.error(error);process.exitCode=1;});

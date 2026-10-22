@@ -1,6 +1,6 @@
 # 构建、测试与发布
 
-[文档首页](../README.md) · 适用 v1.9.1 · 2026-10-21
+[文档首页](../README.md) · 适用 v2.0.0 · 2026-10-22
 
 ## 开发环境
 
@@ -96,3 +96,7 @@ try {
 6. 本地升级前关闭 Excel、备份旧目录和设置；逐文件核对新版并验证设置保留。
 
 文档单独更新可推送 main，不需修改二进制版本或覆盖既有 Release 资产。历史 Release 对应其原始代码和验收记录，当前指南以 main 为准。
+
+## v2.0 扩展验收
+
+`SheetPilot.Tests.exe --ai-extended --excel`、`--ai-chart-matrix`、`--ai-formats` 验证高级操作、完整图表矩阵、四种格式与 VBA 审批。`node tests/live-extended.cjs` 从 `GRIDPILOT_TEST_KEY_FILE` 指定的仓库外文件读取真实密钥，仅输出脱敏结果。Node SQLite 测试使用包内 Electron 的 Node 模式。

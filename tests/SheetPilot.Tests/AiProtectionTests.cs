@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Linq;
 using Newtonsoft.Json.Linq;
@@ -21,7 +21,7 @@ internal static partial class Program
                 var first=propose("values","F2",new JObject{["data"]=new JArray{new JArray{10}}});
                 Check((bool)first["applied"]&&(double)sheet.Range["F2"].Value2==10,"explicit opt-in automatically applies");
                 string folder=(string)first["checkpoint"]["folder"];
-                Check(Directory.GetFiles(folder,"before-*.xlsx").Length==1&&Directory.GetFiles(folder,"after-*.xlsx").Length==1,"complete before/after workbook files exist");
+                Check(Directory.GetFiles(folder,"before-*.snapshot.json").Length==1&&Directory.GetFiles(folder,"after-*.snapshot.json").Length==1,"durable before/after snapshot references exist");
                 propose("formula","F2",new JObject{["formula"]="=SUM(C2:C5)"});
                 propose("values","G2:H2",new JObject{["data"]=new JArray{new JArray{"=literal",true}}});
                 ai.RestoreCheckpoint(true);Check(sheet.Range["F2"].Value2==null&&sheet.Range["G2"].Value2==null,"auto checkpoint coalesces repeated edits to original state");

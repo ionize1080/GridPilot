@@ -2,10 +2,11 @@
 
 [文档首页](../README.md) · [下载最新正式版](https://github.com/ionize1080/GridPilot/releases/latest)
 
-**当前正式版 v1.9.1**。下列页面保留每次发布时的功能和验证，不把旧限制当成当前行为；使用方法请查 [当前指南](../README.md)。
+**当前正式版 v2.0.0**。下列页面保留每次发布时的功能和验证，不把旧限制当成当前行为；使用方法请查 [当前指南](../README.md)。
 
 | 版本 | 发布说明 | 设计／验证 |
 | --- | --- | --- |
+| v2.0.0 | [完整 Excel 操作与多版本快照](RELEASE-v2.0.0.md) | [验证与边界](../v2.0/VALIDATION.md) |
 | v1.9.1 | [连续批准，清晰应用](RELEASE-v1.9.1.md) | [验证与边界](../v1.9.1/VALIDATION.md) |
 | v1.9.0 | [批准、快照、透视表与窗口](RELEASE-v1.9.0.md) | [设计](../v1.9/DESIGN.md) · [验证](../v1.9/VALIDATION.md) |
 | v1.8.0 | [Excel AI 工作区](RELEASE-v1.8.0.md) | [设计](../v1.8/DESIGN.md) · [验证](../v1.8/VALIDATION.md) |
