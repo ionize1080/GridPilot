@@ -47,7 +47,12 @@ internal static partial class Program
                     {
                         string snapshot=(string)JObject.FromObject(ai.Capture("workbook"))["snapshotId"];
                         var p=JObject.FromObject(ai.Extended(new JObject{["snapshotId"]=snapshot,["operation"]="range.write",["options"]=new JObject{["sheet"]="Data",["address"]="A1",["data"]=new JArray{new JArray{"changed"}}}}));
+                        System.Threading.Thread.Sleep(1100); // Cross save-timestamp boundaries in every format.
                         ai.ApplyBatch(new[]{(string)p["proposalId"]});Check((string)b.Worksheets[1].Range["A1"].Value2=="changed","manual edit and snapshots "+format.Item2);
+                        var conflict=JObject.FromObject(ai.Extended(new JObject{["snapshotId"]=snapshot,["operation"]="range.write",["options"]=new JObject{["sheet"]="Data",["address"]="A2",["data"]=new JArray{new JArray{"must not apply"}}}}));
+                        b.Worksheets[1].Range["A3"].Value2="external edit";
+                        bool rejected=false;try{ai.ApplyBatch(new[]{(string)conflict["proposalId"]});}catch(InvalidOperationException ex){rejected=ex.Message.Contains("已变化");}
+                        Check(rejected&&(object)b.Worksheets[1].Range["A2"].Value2==null,"real content conflict remains blocked "+format.Item2);
                         if(format.Item1!=51)
                         {
                             try { ai.Extended(new JObject{["snapshotId"]=snapshot,["operation"]="vba.read",["options"]=new JObject()}); }

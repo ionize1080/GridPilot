@@ -125,7 +125,8 @@ internal static partial class Program
                 if((string)command["action"]=="newBook")other=app.Workbooks.Add(-4167);
                 if((string)command["action"]=="originalBook"){book.Activate();if(other!=null){other.Close(false);other=null;}}
                 IntPtr chrome=IntPtr.Zero;AiEnumTop((hwnd,unused)=>{var title=new StringBuilder(128);AiText(hwnd,title,128);if(title.ToString()=="Chatbox"){chrome=hwnd;return false;}return true;},IntPtr.Zero);
-                var state=new JObject{["sequence"]=sequence,["present"]=chrome!=IntPtr.Zero,["visible"]=chrome!=IntPtr.Zero&&AiVisible(chrome),["docked"]=chrome!=IntPtr.Zero&&AiOwner(chrome,4)==new IntPtr((int)app.Hwnd),["unowned"]=chrome!=IntPtr.Zero&&AiOwner(chrome,4)==IntPtr.Zero};
+                AiWindowProcess(new IntPtr((int)app.Hwnd),out uint excelPid);
+                var state=new JObject{["excelPid"]=excelPid,["sequence"]=sequence,["present"]=chrome!=IntPtr.Zero,["visible"]=chrome!=IntPtr.Zero&&AiVisible(chrome),["docked"]=chrome!=IntPtr.Zero&&AiOwner(chrome,4)==new IntPtr((int)app.Hwnd),["unowned"]=chrome!=IntPtr.Zero&&AiOwner(chrome,4)==IntPtr.Zero};
                 System.IO.File.WriteAllText(System.IO.Path.Combine(directory,"ui-state.json"),state.ToString());
             }
             Check((string)sheet.Range["E8"].Value2=="焦点保护哨兵","computer-use typing never modified active Excel cell");

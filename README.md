@@ -6,7 +6,7 @@
 
 GridPilot 是 Windows 桌面 Excel 的便携工具集：用 AI 助手分析表格、生成公式和图表，用预览与快照管理变更，也可以离线完成排序、导航、复制、脱敏和报表核对。
 
-**当前正式版：v2.0.0** · 文档更新：2026-10-22
+**当前正式版：v2.1.0** · 文档更新：2026-10-22
 
 [下载正式版](https://github.com/ionize1080/GridPilot/releases/latest) · [快速开始](docs/guides/QUICKSTART.md) · [AI 助手指南](docs/guides/AI.md) · [全部文档](docs/README.md) · [更新记录](docs/releases/README.md)
 
@@ -14,7 +14,7 @@ GridPilot 是 Windows 桌面 Excel 的便携工具集：用 AI 助手分析表�
 
 | 想做什么 | GridPilot 提供什么 | 使用说明 |
 | --- | --- | --- |
-| 分析当前表格、写公式 | 12 个精简工具入口，按需发现工作簿、透视表、73 种图表、VBA 与插件操作 | [AI 助手](docs/guides/AI.md) |
+| 分析当前表格、写公式 | 13 个精简工具入口，按需发现工作簿、透视表、73 种图表、VBA 与插件操作 | [AI 助手](docs/guides/AI.md) |
 | 连续应用 AI 建议 | 独立批准开关、危险 VBA 强制手动批准、多版本完整快照 | [批准与恢复](docs/guides/AI.md#批准与恢复) |
 | 按业务逻辑排列记录 | 最多 20 层联动排序，中文数字、自定义序列、自然顺序、预览与恢复原序 | [多级排序](docs/guides/SORTING.md) |
 | 快速找到、整理工作表 | 搜索、跨工作簿导航、原地改名、标签排序与聚焦高亮 | [导航与常用工具](docs/guides/WORKSHEET-TOOLS.md) |
@@ -43,7 +43,7 @@ GridPilot 是 Windows 桌面 Excel 的便携工具集：用 AI 助手分析表�
 
 1. **完整解压** [Release 便携包](https://github.com/ionize1080/GridPilot/releases/latest)，放入有写入权限的目录。保留同目录的 DLL、`App/`、`Browser/`、`Resources/`、`Chatbox/`；不能只复制 XLL。
 2. **按 Excel 位数加载**：32 位 Excel 用 `GridPilot-x86.xll`，64 位 Excel 用 `GridPilot-x64.xll`。在 Excel 的加载项管理中浏览并选择；不要同时加载新旧两份。
-3. 打开 **GridPilot** 选项卡。AI 助手中先配置自己的模型服务与密钥，再选择「选区／工作表／工作簿／不附加」并发送问题。其他工具可在「设置 → 功能开关」启用。
+3. 打开 **GridPilot** 选项卡。AI 助手中先配置自己的模型服务与密钥，默认使用「自动」按需读取，也可选择「所有工作簿／选区／工作表／工作簿／不附加」并发送问题。其他工具可在「设置 → 功能开关」启用。
 
 运行环境是 **64 位 Windows 10/11 + 桌面 Excel + .NET Framework 4.6.2 或更高版本**。运行时随包附带，不需要另装 Node.js、Chrome 或 WebView2。Office 信任策略仍然适用。
 
@@ -77,11 +77,11 @@ flowchart LR
 - 「不附加」停止自动加入新的 Excel 上下文，不会删除已有对话中的数据。密钥与聊天配置由独立的本地 Chatbox 配置管理，不随便携发布包分发。
 - 备份、数据库和还原记录可能含原始数据。保存位置、清理方法和共享边界见 [数据与存储](docs/guides/DATA-AND-STORAGE.md)。
 
-## v2.0.0 的变化
+## v2.1.0 的变化
 
-增强透视表字段、筛选、排序、计算与分组；支持 73 种 Excel 2010 图表以及坐标轴、绘图区、曲线、点、字体和颜色编辑。新增工作簿／工作表／范围、表格、名称、批注、图片、迷你图、CSV、VBA 与常用插件操作。批量重命名和自定义多级排序复用现有引擎。
+默认自动上下文，按需读取所有打开工作簿及 VBA；全工作簿模式逐本核对。快照默认 500 MB 预算，最低 100 MB，超额自动清理旧版本。总设置可隐藏新手快捷入口。开启自动批准新增原生风险确认框。新增按 Excel 版本及实际接口启用的动态数组、线程批注、查询定义、切片器和现代图表操作。
 
-新增按内容去重的完整历史快照、独立批准按钮和按需 MCP 帮助。调整旧版 Office 侧栏客户区对齐与裁切。真实 Excel、真实 DeepSeek 调用及原生界面测试的具体范围见 [发布说明](docs/releases/RELEASE-v2.0.0.md) · [验证记录](docs/v2.0/VALIDATION.md)。Excel 2010 黑边仍需该版本实机验收，不能以 Office 365 通过代替。
+[发布说明](docs/releases/RELEASE-v2.1.0.md) · [测试与边界](docs/v2.1/VALIDATION.md)。
 
 ## 开发与文档
 

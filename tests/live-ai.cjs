@@ -61,7 +61,7 @@ async function waitFor(predicate,label,timeout=180000){const start=Date.now();wh
     const aiReadStart=operations.length,inspectStart=actions.filter(a=>a==='aiInspect').length;
     await ask('请分别调用Excel的四个只读工具：inspect检查工作簿结构，read读取销售工作表一页数据，find在销售中查找甲，statistics统计销售第2列的总和。必须实际分别调用四种工具，然后简短报告收入合计。',()=>['read','find','statistics'].every(k=>operations.slice(aiReadStart).includes(k))&&actions.filter(a=>a==='aiInspect').length>inspectStart);
     console.log('PASS live read, find, statistics and workbook inspection');
-    const docs=path.join(root,'docs/v2.0');fs.mkdirSync(docs,{recursive:true});
+    const docs=path.join(root,'docs/v2.1');fs.mkdirSync(docs,{recursive:true});
     await application.evaluate(({BrowserWindow})=>{const w=BrowserWindow.getAllWindows()[0];w.setSize(480,850);w.webContents.send('gridpilot:mode','sidebar');});
     await page.waitForFunction(()=>document.documentElement.dataset.gpMode==='sidebar');
     assert.equal(await page.locator('.controls.self-start').first().isVisible(),false);assert.equal(await page.getByLabel('弹出为独立窗口').count(),1);

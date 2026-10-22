@@ -33,7 +33,7 @@ for file in (root / 'dist').rglob('*'):
     if file.is_file():
         with file.open('rb') as stream:
             inspect(stream, file.relative_to(root))
-for file in (root / 'release-v2.0.0').glob('*.zip'):
+for file in (root / 'release-v2.1.0').glob('*.zip'):
     with zipfile.ZipFile(file) as archive:
         for item in archive.infolist():
             if not item.is_dir():

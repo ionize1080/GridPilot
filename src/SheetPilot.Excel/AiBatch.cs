@@ -21,7 +21,7 @@ namespace SheetPilot.Excel
         }
         public object Metadata(string id)
         {
-            var snapshot=Get(id);var result=new List<object>();
+            var snapshot=Get(id);if(!snapshot.dataCaptured&&snapshot.parent==null)throw new InvalidOperationException("当前是工作簿目录，请先用 excel_context 选择工作簿，再用返回的 snapshotId 检查结构。");var result=new List<object>();
             foreach(string name in snapshot.sheets)
             {
                 object sheet=Worksheet(snapshot,name),tables=null,charts=null,pivots=null;
@@ -152,7 +152,7 @@ namespace SheetPilot.Excel
             try
             {
                 dynamic c=chart;series=c.SeriesCollection();
-                for(int i=1;i<=(int)((dynamic)series).Count;i++){object item=((dynamic)series).Item(i);try{formulas.Add((string)((dynamic)item).Formula);}finally{Release(item);}}
+                for(int i=1;i<=(int)((dynamic)series).Count;i++){object item=((dynamic)series).Item(i);try{try{formulas.Add((string)((dynamic)item).Formula);}catch(NotImplementedException){formulas.Add("Formula unavailable for this native chart type");}}finally{Release(item);}}
                 string text=null;if((bool)c.HasTitle){title=c.ChartTitle;text=((dynamic)title).Text;}
                 return new JObject{["name"]=(string)obj.Name,["left"]=(double)obj.Left,["top"]=(double)obj.Top,["width"]=(double)obj.Width,["height"]=(double)obj.Height,["type"]=(int)c.ChartType,["style"]=JToken.FromObject(c.ChartStyle),["legend"]=(bool)c.HasLegend,["title"]=text,["series"]=formulas};
             }finally{Release(title);Release(series);Release(chart);}

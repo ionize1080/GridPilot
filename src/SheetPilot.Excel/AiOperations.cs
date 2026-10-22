@@ -30,7 +30,8 @@ namespace SheetPilot.Excel
         }
         private sealed class Snapshot
         {
-            public string id, scope, bookName;
+            public string id, scope, bookName, parent;
+            public bool dataCaptured;
             public object book;
             private readonly FileStream spool = new FileStream(Path.Combine(Path.GetTempPath(),"GridPilot-ai-"+Guid.NewGuid().ToString("N")),FileMode.CreateNew,FileAccess.ReadWrite,FileShare.None,65536,FileOptions.DeleteOnClose);
             public long count;
@@ -52,7 +53,7 @@ namespace SheetPilot.Excel
             public object sourceFormula,afterSourceFormula;
             public JObject options, chartState;
         }
-        public AiOperations(Func<object> application) { this.application = application; }
+        public AiOperations(Func<object> application, string historyRoot = null) { this.application = application; if(historyRoot!=null)historyStore=new WorkbookSnapshotStore(historyRoot); }
         private static void Release(object value) { if (value != null && Marshal.IsComObject(value)) Marshal.ReleaseComObject(value); }
         private static object At(object value, int row, int column)
         {
@@ -91,11 +92,12 @@ namespace SheetPilot.Excel
         public async Task<object> CaptureAsync(string scope)
         {
             CancelCapture=false;
+            if(scope=="auto"||scope=="all")return CaptureCatalog(scope);
             if (scope != "selection" && scope != "sheet" && scope != "workbook")
                 throw new InvalidOperationException("请选择选区、当前工作表或当前工作簿。");
             dynamic app = application(); object book = app.ActiveWorkbook;
             if (book == null) throw new InvalidOperationException("请先打开工作簿。");
-            var snapshot = new Snapshot { id = Guid.NewGuid().ToString("N"), scope = scope, book = book, bookName = (string)((dynamic)book).Name };
+            var snapshot = new Snapshot { id = Guid.NewGuid().ToString("N"), scope = scope, dataCaptured=true, book = book, bookName = (string)((dynamic)book).Name };
             object active = app.ActiveSheet, sheets = null, selected = scope == "selection" ? app.Selection : null;
             var changes=new ExcelEvents((object)app);bool changed=false;
             try
@@ -119,13 +121,7 @@ namespace SheetPilot.Excel
                 }
                 // Expire before retaining new COM references. Old chat messages remain readable,
                 // but tools must ask for a fresh snapshot rather than resolve by workbook name.
-                if (snapshotOrder.Count >= 8)
-                {
-                    string oldest = snapshotOrder.Dequeue();
-                    if (undo?.Any(p=>p.snapshot==oldest)!=true) { snapshots[oldest].Dispose(); snapshots.Remove(oldest); }
-                    foreach (var key in proposals.Where(p => p.Value.snapshot == oldest).Select(p => p.Key).ToArray()) proposals.Remove(key);
-
-                }
+                RetireOldContext();
                 Progress?.Invoke("正在整理上下文", 95, snapshot.count, snapshot.count);
                 if(YieldCapture != null) await YieldCapture();
                 var statistics = await Task.Run(() => Statistics(snapshot.cells));
@@ -293,6 +289,7 @@ namespace SheetPilot.Excel
         public object Read(JObject request)
         {
             var snapshot = Get((string)request["snapshotId"]);
+            if(!snapshot.dataCaptured)throw new InvalidOperationException("当前仅有目录，请先 context.capture 读取所需工作簿/工作表，再使用返回的 snapshotId。");
             string sheet = (string)request["sheet"], query = (string)request["query"] ?? "";
             int column = (int?)request["column"] ?? 0;
             var cells = snapshot.cells.Where(c => (string.IsNullOrEmpty(sheet) || c.sheet == sheet) && (column == 0 || c.column == column));
@@ -310,7 +307,7 @@ namespace SheetPilot.Excel
             else if (operation != "read") throw new InvalidOperationException("不支持的读取操作。");
             long offset=Math.Max(0,(long?)request["offset"]??0),total=0;var page=new List<Cell>();
             foreach(var cell in cells){if(total>=offset&&page.Count<200)page.Add(cell);total++;}
-            return new {snapshotId=snapshot.id,total,offset,cells=page,hasMore=offset+page.Count<total};
+            return new {snapshotId=snapshot.id,total,offset,cells=page,nextOffset=offset+page.Count<total?(long?)(offset+page.Count):null,hasMore=offset+page.Count<total};
         }
         public static void ValidateFormula(string formula)
         {

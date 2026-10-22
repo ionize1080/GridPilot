@@ -1,7 +1,7 @@
 const assert=require('node:assert/strict');
 const {tools,handleTool,permitted}=require('../integrations/chatbox/tools.cjs');
 (async()=>{
-  assert.equal(tools.length,12);assert(!tools.some(t=>/apply|undo/.test(t.name)));
+  assert.equal(tools.length,13);assert(!tools.some(t=>/apply|undo/.test(t.name)));
   let calls=0,last,published;
   const host=async request=>{calls++;last=request;return {total:2,cells:[],proposalId:'proposal'};};
   const publish=value=>published=value;
@@ -26,5 +26,11 @@ const {tools,handleTool,permitted}=require('../integrations/chatbox/tools.cjs');
   const before=calls;result=await handleTool({name:'excel_operation',arguments:{snapshotId,operation:'aiApproval',options:{enabled:true}}},host,publish);assert(result.isError);assert.equal(calls,before);
   await handleTool({name:'excel_operation',arguments:{snapshotId,operation:'vba.write',options:{module:'Test',code:'Shell "cmd"'},action:'aiApply'}},host,publish);assert.equal(last.action,'aiExtended');assert.equal(last.operation,'vba.write');
   assert(!permitted('excel_propose_values',{}, {GRIDPILOT_MCP_READ_ONLY:'1'}));assert(!permitted('excel_operation',{operation:'sheet.delete'},{GRIDPILOT_MCP_READ_ONLY:'1'}));assert(permitted('excel_operation',{operation:'vba.read'},{GRIDPILOT_MCP_READ_ONLY:'1'}));assert(!permitted('excel_statistics',{}, {GRIDPILOT_MCP_TOOLS:'excel_read,excel_help'}));
+  let binding;
+  result=await handleTool({name:'excel_operation',arguments:{snapshotId,operation:'context.capture',options:{bookId:'b'.repeat(32)}}},async r=>{assert.equal(r.action,'aiExtended');return {snapshotId:'c'.repeat(32)};},r=>binding=r);
+  assert.equal(binding.parentSnapshotId,snapshotId);assert.equal(binding.snapshotId,'c'.repeat(32));assert(binding.contextBinding);
+  result=await handleTool({name:'excel_help',arguments:{snapshotId,topic:'range'}},async r=>{assert.equal(r.operation,'capability.list');return {enabledOperations:['range.calculate']};},()=>{});
+  const discovered=JSON.parse(result.content[0].text);assert(!discovered.operations.includes('range.formula2'));assert(discovered.operations.includes('range.calculate'));
+  assert(permitted('excel_operation',{operation:'context.capture'},{GRIDPILOT_MCP_READ_ONLY:'1'}));assert(permitted('excel_operation',{operation:'query.list'},{GRIDPILOT_MCP_READ_ONLY:'1'}));assert(!permitted('excel_operation',{operation:'query.set'},{GRIDPILOT_MCP_READ_ONLY:'1'}));
   console.log('PASS Excel MCP contract: compact discovery, no approval/restore tools, validated routing, read-only/filter policies and errors');
 })().catch(error=>{console.error(error);process.exitCode=1;});

@@ -1,12 +1,12 @@
 # Excel MCP：精简入口，按需发现
 
-[文档首页](../README.md) · v2.0.0 · 2026-10-22
+[文档首页](../README.md) · v2.1.0 · 2026-10-22
 
-12 个公开工具：原有 10 个读取／建议工具，加 `excel_help` 和 `excel_operation`。高级目录按需返回，不放进每轮工具描述；当前包含 79 个操作。结构描述约 8.9 KB JSON（字节数，不等同于 token）。
+13 个公开工具：原有 10 个读取／建议工具，加 `excel_context`、`excel_help` 和 `excel_operation`。高级目录按需返回，不放进每轮工具描述；当前包含 99 个操作。目录不随每轮发送。
 
 ## 调用约定
 
-1. 使用当前对话最新上下文中的 `snapshotId`；快照绑定具体工作簿对象。
+1. 自动/所有工作簿模式先调用 `excel_context({snapshotId:目录标识,bookId:目录中的标识,mode:"capture",sheet?:表名,address?:范围})`，后续数据和修改工具必须使用返回的子 `snapshotId`。省略表/区域时完整扫描含隐藏表的工作簿；mode=bind 只绑定元数据/VBA。目录标识不能当作已扫描数据。
 2. `excel_help({operation:"pivot.field"})` 查询参数，或 `excel_help({topic:"pivot"})` 列出操作。
 3. `excel_operation({snapshotId,operation,options})` 读取或生成建议。修改成功必须检查 `applied=true`；否则等待用户应用。
 4. 分页读取，使用 1-based 索引，只有 offset 为 0-based。值不执行公式；公式以 = 开头。
@@ -156,6 +156,27 @@ MCP 使用官方 SDK stdio，提供 `gridpilot://guide` Resource 和 `excel-work
 
 不可变 JSON 清单 + SHA-256 内容寻址 + 256 KiB gzip 块。OOXML 先拆 ZIP 部件再去重，.xls 按原始文件分块。原子写入 flush+rename；恢复验证每块哈希。所有原始字节保留；仅审批比较时规范化保存时间、工作簿 revision 指针及 VBA 工程随机元数据。CFB 比较逻辑规范化目录／流，保留 VBA 保护字段的解码值，不清除保护。
 
-规范参考：[Microsoft MS-OVBA 数据解码](https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ovba/7e9d84fe-86e3-46d6-aaff-8388e72c0168)、[Microsoft 图表枚举](https://learn.microsoft.com/en-us/office/vba/api/excel.xlcharttype)、[excel-mcp-server](https://github.com/haris-musa/excel-mcp-server)。
+规范参考：[Microsoft MS-OLEPS 保存时间](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-oleps/47f4bebf-9513-4d40-a4bc-1eda5ce6732a)、[Microsoft MS-OVBA 数据解码](https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ovba/7e9d84fe-86e3-46d6-aaff-8388e72c0168)、[Microsoft 图表枚举](https://learn.microsoft.com/en-us/office/vba/api/excel.xlcharttype)、[excel-mcp-server](https://github.com/haris-musa/excel-mcp-server)。
 
-恢复打开完整独立工作簿，保留原文档的未保存编辑。高级写入的失败信息包含变更前版本编号；本次没有实现数据库 WAL、瞬时 COW 或自动历史回收，SaveCopyAs 仍有完整保存成本。
+恢复打开完整独立工作簿，保留原文档的未保存编辑。高级写入的失败信息包含变更前版本编号；历史预算自动回收已实现，SaveCopyAs 仍有完整保存成本；不具备数据库 WAL 或瞬时 COW。
+
+## v2.1 新版 Office 操作
+
+`capability.list` 返回 Version/Build、接口探测和可用操作；`excel_help({snapshotId,topic})` 按宿主能力过滤。无需每次重复读取能力清单；同一工作簿和宿主会话可以复用结果，遇到原生错误再重新核验。
+
+| 组 | 操作 | 启用依据 |
+| --- | --- | --- |
+| 动态数组 | range.formula2 / range.spill | 16+ 且 Formula2、HasSpill 实际可读 |
+| 线程批注 | comment.list / add / reply / delete | 16+ 且 CommentThreaded 实际可读 |
+| Power Query | query.list / set / delete | 16+ 且 Workbook.Queries 可读；不刷新来源 |
+| 数据模型 | model.inspect | 15+ 且 Workbook.Model 可读 |
+| 连接 | connection.list | 名称、类型与说明；不返回连接串，不刷新 |
+| 切片器 | slicer.list / filter / clear / timeline | 基础筛选；时间线 15+ 并由原生缓存校验 |
+| 表格及计算 | table.resize / range.calculate | 原生 Excel 表格/区域接口 |
+| 现代图表 | chart.create / edit / series | 组合类型 15+、现代类型 16+；具体数据形状/Build 原生校验 |
+
+现代图表使用 Shapes.AddChart2，创建前临时选定源范围，并恢复原活动位置；不调用部分现代类型未实现的 SetSourceData。旧图表继续原有路径，趋势线/误差线的 type 与图表 type 分开验证。新工具仍走完整快照和批准链路。
+
+官方核验：[Formula2](https://learn.microsoft.com/en-us/office/vba/api/excel.range.formula2)、[HasSpill](https://learn.microsoft.com/en-us/office/vba/api/excel.range.hasspill)、[Queries](https://learn.microsoft.com/en-us/office/vba/api/excel.workbook.queries)、[CommentThreaded](https://learn.microsoft.com/en-us/office/vba/api/excel.range.commentthreaded)、[AddChart2](https://learn.microsoft.com/en-us/office/vba/api/excel.shapes.addchart2)、[XlChartType](https://learn.microsoft.com/en-us/office/vba/api/excel.xlcharttype)。
+
+自动/所有工作簿模式的最大读取范围为目录创建时当前 Excel 进程已打开的工作簿及 VBA。workbook.open/import、目录文件枚举、CSV 导入和磁盘图片读取在这些模式中被拒绝；新打开的文件需重新发送以创建目录。恢复、批准与宏执行始终不属于模型工具。

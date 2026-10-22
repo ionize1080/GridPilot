@@ -59,6 +59,11 @@ namespace SheetPilot.Core
         [DataMember] public int IconTheme { get; set; }
         [DataMember] public bool AiEnabled { get; set; } = true;
         [DataMember] public int AiDisplayMode { get; set; }
+        [DataMember] public int SnapshotBudgetMB { get; set; } = 500;
+        [DataMember] public bool AiShowExplain { get; set; } = true;
+        [DataMember] public bool AiShowGenerate { get; set; } = true;
+        [DataMember] public bool AiShowAnalyze { get; set; } = true;
+        [DataMember] public bool AiShowManualFormula { get; set; } = true;
         [DataMember] public bool MaskReplaceMentions { get; set; } = true;
         [DataMember] public bool MaskPreserveFormatting { get; set; } = true;
         [DataMember] public bool PreserveVisualAlignment { get; set; } = true;
@@ -72,9 +77,10 @@ namespace SheetPilot.Core
         [DataMember] public int ConversionLimit { get; set; } = 50000;
         [DataMember] public int DecimalCulture { get; set; }
         [OnDeserializing] private void Initialize(StreamingContext c)
-        { AiEnabled=true; EnabledFeatures=DefaultFeatures(); SortContextMenu=true; Sort=new SortOptions(); FocusRipple = MaskPreserveFormatting = MaskReplaceMentions = true; RippleDuration=280; RippleWidth=36; RippleStrength=24; SchemaVersion = 1; Rename = new RenameOptions(); FocusColor = "#42AD91"; FocusOpacity = 20; FocusInterval = 33; PreserveVisualAlignment = FocusRow = FocusColumn = ClearActiveCell = PreserveLeadingZeros = ProtectPrecision = TrimNumericText = AllowThousands = NumberAsTextHint = true; ConversionLimit = 50000; }
+        { SnapshotBudgetMB=500; AiShowExplain=AiShowGenerate=AiShowAnalyze=AiShowManualFormula=true; AiEnabled=true; EnabledFeatures=DefaultFeatures(); SortContextMenu=true; Sort=new SortOptions(); FocusRipple = MaskPreserveFormatting = MaskReplaceMentions = true; RippleDuration=280; RippleWidth=36; RippleStrength=24; SchemaVersion = 1; Rename = new RenameOptions(); FocusColor = "#42AD91"; FocusOpacity = 20; FocusInterval = 33; PreserveVisualAlignment = FocusRow = FocusColumn = ClearActiveCell = PreserveLeadingZeros = ProtectPrecision = TrimNumericText = AllowThousands = NumberAsTextHint = true; ConversionLimit = 50000; }
         public void Normalize()
         {
+            SnapshotBudgetMB = Math.Max(100, SnapshotBudgetMB);
             AiDisplayMode = AiDisplayMode == 1 ? 1 : 0;
             if(EnabledFeatures==null)EnabledFeatures=new string[0];
             if(Sort==null)Sort=new SortOptions();

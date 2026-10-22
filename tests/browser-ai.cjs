@@ -77,8 +77,8 @@ const server=net.createServer(s=>{
     await page.waitForFunction(()=>!document.querySelector('.gp-menu').open);
     assert(approval.automatic&&approval.approvalScope==='workbook','default opt-in scope is current workbook');
     assert.equal(await page.getByRole('switch',{name:'自动批准'}).evaluate(e=>getComputedStyle(e).color),'rgb(220, 69, 75)','auto approval icon is red');
-    fs.mkdirSync(path.join(root,'docs/v2.0'),{recursive:true});
-    await page.screenshot({path:path.join(root,'docs/v2.0/auto-approval.png')});
+    fs.mkdirSync(path.join(root,'docs/v2.1'),{recursive:true});
+    await page.screenshot({path:path.join(root,'docs/v2.1/auto-approval.png')});
     const webState=await page.locator('#gridpilot-native-web-search').getAttribute('data-enabled');
     await page.getByLabel('Excel工具',{exact:true}).click();await page.getByRole('button',{name:/联网搜索/}).click();
     await page.waitForFunction(previous=>document.getElementById('gridpilot-native-web-search').dataset.enabled!==previous,webState);
@@ -108,7 +108,7 @@ const server=net.createServer(s=>{
     mcpClient=new Client({name:'GridPilot-test',version:'1.0.0'});
     await mcpClient.connect(new StdioClientTransport({...bridge.transport,stderr:'pipe'}));
     const rpc=async(method,params={})=>({result:method==='tools/list'?await mcpClient.listTools():await mcpClient.callTool(params)});
-    const list=await rpc('tools/list');assert.equal(list.result.tools.length,12);assert(!list.result.tools.some(t=>/apply|undo/.test(t.name)));
+    const list=await rpc('tools/list');assert.equal(list.result.tools.length,13);assert(!list.result.tools.some(t=>/apply|undo/.test(t.name)));
     const proposed=await rpc('tools/call',{name:'excel_propose_formula',arguments:{snapshotId,sheet:'销售',address:'D2',formula:'=SUM(B2:B4)'}});
     assert(!proposed.result.isError);assert.equal(applied,0);
     await page.locator('#gridpilot-excel').getByText('=SUM(B2:B4)',{exact:true}).waitFor({state:'attached'});
@@ -118,7 +118,7 @@ const server=net.createServer(s=>{
     await page.locator('#gridpilot-excel button').filter({hasText:'一键应用'}).click();assert.equal(applied,1);
     const working=page.getByRole('button',{name:'正在应用并保存快照…',exact:true});assert(await working.isDisabled());
     const colors=await working.evaluate(e=>({color:getComputedStyle(e).color,background:getComputedStyle(e).backgroundColor,opacity:getComputedStyle(e).opacity}));assert.equal(colors.color,'rgb(255, 255, 255)');assert.equal(colors.background,'rgb(73, 110, 100)');assert.equal(colors.opacity,'1');
-    fs.mkdirSync(path.join(root,'docs/v2.0'),{recursive:true});await page.locator('#gridpilot-excel').screenshot({path:path.join(root,'docs/v2.0/applying.png')});
+    fs.mkdirSync(path.join(root,'docs/v2.1'),{recursive:true});await page.locator('#gridpilot-excel').screenshot({path:path.join(root,'docs/v2.1/applying.png')});
     await page.waitForFunction(()=>!document.querySelector('#gridpilot-excel .gp-primary'));console.log('PASS clear, high-contrast applying state and finished batch');
     await page.getByLabel('Excel工具',{exact:true}).click();await page.locator('#gridpilot-excel-tools button').filter({hasText:'撤销上次应用'}).click();await page.getByLabel('Excel工具',{exact:true}).click();
     await page.getByLabel('Excel上下文范围').selectOption('selection');
@@ -153,11 +153,11 @@ const server=net.createServer(s=>{
     await page.waitForTimeout(300);
     assert(modelRequests.some(r=>JSON.stringify(r.messages).includes('GridPilot PDF attachment verification')),'native model receives parsed PDF text');
     console.log('PASS native TXT/PDF/DOCX parsing, Unicode picker path, PDF message through Chatbox provider');
-    fs.mkdirSync(path.join(root,'docs/v2.0'),{recursive:true});
-    await page.screenshot({animations:'disabled',path:path.join(root,'docs/v2.0/chatbox-window.png')});
+    fs.mkdirSync(path.join(root,'docs/v2.1'),{recursive:true});
+    await page.screenshot({animations:'disabled',path:path.join(root,'docs/v2.1/chatbox-window.png')});
     await application.evaluate(({BrowserWindow})=>{const w=BrowserWindow.getAllWindows()[0];w.setSize(480,850);w.webContents.send('gridpilot:mode','sidebar');});
     await page.waitForFunction(()=>document.getElementById('gridpilot-excel')?.dataset.mode==='sidebar');
-    await page.screenshot({animations:'disabled',path:path.join(root,'docs/v2.0/chatbox-narrow.png')});
+    await page.screenshot({animations:'disabled',path:path.join(root,'docs/v2.1/chatbox-narrow.png')});
     const overflow=await page.locator('#gridpilot-excel').evaluate(e=>e.scrollWidth>e.clientWidth+2);assert.equal(overflow,false);
     await application.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].setSize(1100,850));
     await application.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].webContents.send('navigate-to','/settings/provider'));
@@ -165,7 +165,7 @@ const server=net.createServer(s=>{
     await page.getByText('API 密钥',{exact:true}).waitFor();
     await page.waitForTimeout(400); // Native modal transition, before the documentation screenshot.
     console.log('Native settings:',(await page.locator('body').innerText()).slice(-1500));
-    await page.screenshot({animations:'disabled',path:path.join(root,'docs/v2.0/chatbox-settings.png')});
+    await page.screenshot({animations:'disabled',path:path.join(root,'docs/v2.1/chatbox-settings.png')});
     assert.deepEqual(errors,[]);
     console.log('PASS official native UI, Chinese draft, context opt-out, full-scope MCP, stdio transport, proposal/apply/undo, narrow layout');
   }finally{if(mcpClient)await mcpClient.close();if(application)await application.close();socket?.destroy();server.close();modelServer.close();}

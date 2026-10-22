@@ -22,6 +22,8 @@ internal static partial class Program
     {
         try
         {
+            if(args.Length==3 && args[0]=="--ai-confirmation"){AiConfirmationTest(uint.Parse(args[1]),args[2]=="yes");return 0;}
+            if(args.Length>0 && args[0]=="--ai-v21"){AiV21Tests(args.Contains("--excel"));Console.WriteLine("PASS "+checks+" assertions");return 0;}
             if(args.Length>0 && args[0]=="--ai-chart-matrix"){AiChartMatrixTests();Console.WriteLine("PASS "+checks+" assertions");return 0;}
             if(args.Length>0 && args[0]=="--ai-formats"){AiVbaAndFormatsTests();Console.WriteLine("PASS "+checks+" assertions");return 0;}
             if(args.Length>0 && args[0]=="--ai-extended"){AiExtendedTests(args.Contains("--excel"));Console.WriteLine("PASS "+checks+" assertions");return 0;}

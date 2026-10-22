@@ -20,7 +20,7 @@ internal static partial class Program
             book=app.Workbooks.Add(-4167);dynamic sheet=book.Worksheets[1];sheet.Name="销售";
             sheet.Range["A1:C4"].Value2=new object[,]{{"项目","收入","成本"},{"甲",100.0,40.0},{"乙",200.0,90.0},{"丙",150.0,70.0}};
             sheet.Range["A1:C4"].Select();
-            using(var ai=new AiOperations(()=>(object)app))
+            using(var ai=new AiOperations(()=>(object)app,System.IO.Path.Combine(System.IO.Path.GetTempPath(),"gp-live-history-"+Guid.NewGuid().ToString("N"))))
             {
                 ai.Progress=(phase,percent,current,total)=>Console.WriteLine(JsonConvert.SerializeObject(new{type="progress",phase,percent,current,total}));
                 string line;
@@ -36,7 +36,7 @@ internal static partial class Program
                             case "aiContext":result=ai.Context();break;
                             case "aiCapture":result=ai.Capture((string)m["scope"]);break;
                             case "aiRead":result=ai.Read(m);break;
-                            case "aiExtended": result=ai.Extended(m);break;
+                            case "aiExtended": result=ai.ExtendedAsync(m).GetAwaiter().GetResult();break;
                         case "aiHistory": result=ai.SnapshotHistory();break;
                         case "aiOpenVersion": result=ai.OpenVersion((string)m["versionId"]);break;
                         case "aiInspect":result=ai.Metadata((string)m["snapshotId"]);break;
@@ -51,6 +51,13 @@ internal static partial class Program
                             case "testPivot": dynamic ps=book.Worksheets[(string)m["sheet"]],pt=ps.PivotTables(1);result=new{count=(int)ps.PivotTables().Count,total=(double)pt.GetPivotData((string)pt.DataFields(1).Name).Value2};break;
                             case "testRead":
                                 result=new{value=(object)sheet.Range[(string)m["address"]].Value2,formula=(object)sheet.Range[(string)m["address"]].Formula,bold=(object)sheet.Range[(string)m["address"]].Font.Bold,charts=(int)sheet.ChartObjects().Count};break;
+                            case "testSetupV21":
+                                dynamic hidden=book.Worksheets.Add();hidden.Name="调整";hidden.Range["A1:B2"].Value2=new object[,]{{"项目","调整金额"},{"年度调整",25.0}};hidden.Visible=2;
+                                string macroFile=System.IO.Path.Combine(System.IO.Path.GetTempPath(),"gp-live-"+Guid.NewGuid().ToString("N")+".xlsm");book.SaveAs(macroFile,52);
+                                dynamic component=book.VBProject.VBComponents.Add(1);component.Name="RevenuePolicy";component.CodeModule.AddFromString("Public Function RevenueFactor() As Double\n RevenueFactor = 1.08\nEnd Function");
+                                dynamic second=app.Workbooks.Add(-4167),other=second.Worksheets[1];other.Name="销售";other.Range["A1:C3"].Value2=new object[,]{{"项目","收入","成本"},{"丁",80.0,20.0},{"戊",120.0,50.0}};book.Activate();sheet.Activate();
+                                result=new{first=(string)book.Name,second=(string)second.Name};break;
+                            case "testActivate":book.Activate();sheet.Activate();result=new{ready=true};break;
                             case "testLarge":sheet.Range["K1:L100001"].Value2=1;result=new{ready=true};break;
                             default:throw new InvalidOperationException("Unknown bridge action");
                         }

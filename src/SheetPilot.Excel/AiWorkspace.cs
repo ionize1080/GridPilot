@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
@@ -104,6 +104,8 @@ namespace SheetPilot.Excel
         private bool aiDocked;
         private void ApplyAiSettings()
         {
+            if(ai!=null){ai.SnapshotBudgetMB=settings.SnapshotBudgetMB;ai.ApplySnapshotBudget();}
+            else {var history=new WorkbookSnapshotStore(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"GridPilot","Recovery","history-v2"));history.BudgetBytes=(long)settings.SnapshotBudgetMB*1024*1024;history.Prune();}
             if(!settings.AiEnabled){CloseAi();return;}
             if(aiWindow==null || aiHandle==IntPtr.Zero)return;
             SetAiMode(settings.AiDisplayMode==0);
@@ -147,7 +149,8 @@ namespace SheetPilot.Excel
             bool locked;
             try { locked = aiProfileLock.WaitOne(0); } catch (System.Threading.AbandonedMutexException) { locked = true; }
             if (!locked) { aiProfileLock.Dispose(); aiProfileLock = null; throw new InvalidOperationException("另一Excel进程已打开AI助手。请先关闭那里的Chatbox，再在此进程打开；同一Excel进程可直接切换工作簿。"); }
-            ai = new AiOperations(() => ExcelDnaUtil.Application);
+            ai = new AiOperations(() => ExcelDnaUtil.Application) { SnapshotBudgetMB=settings.SnapshotBudgetMB };
+            ai.ApplySnapshotBudget();
             bool sidebar = settings.AiDisplayMode == 0;
             try
             {
@@ -167,15 +170,21 @@ namespace SheetPilot.Excel
                             bool dock=(string)message["mode"]=="sidebar";SetAiMode(dock);settings.AiDisplayMode=dock?0:1;store.Save(settings);
                             result=new {mode=settings.AiDisplayMode==0?"sidebar":"window",message="已切换工作方式"};break;
                         case "aiApplyBatch": result=ai.ApplyBatch(message["proposalIds"]?.ToObject<string[]>());break;
-                        case "aiApproval": result = ai.Approval((bool?)message["enabled"] == true,(string)message["scope"]??"session"); break;
+                        case "aiApproval":
+                            bool enable=(bool?)message["enabled"]==true;
+                            string lifetime=(string)message["scope"]??"session";
+                            if(enable){var current=JObject.FromObject(ai.Context());
+                                var answer=MessageBox.Show("启用后，AI 可直接修改工作簿「"+(string)current["book"]+"」的数据、公式、格式、图表及普通 VBA，无需逐项批准。AI 可能出错或删除内容。\n\n有效期："+(lifetime=="workbook"?"本工作簿，多轮对话有效":"仅本次对话")+"。其他工作簿不会获得授权。\n\n完整快照受 "+settings.SnapshotBudgetMB+" MB 预算限制，旧版本会自动删除，不能保证永久恢复。危险 VBA 仍需逐项手动批准。\n\n确认启用自动批准？","确认自动批准",MessageBoxButtons.YesNo,MessageBoxIcon.Warning,MessageBoxDefaultButton.Button2);
+                                if(answer!=DialogResult.Yes){result=ai.CheckpointState();break;}}
+                            result=ai.Approval(enable,lifetime);break;
                         case "aiConversation": result=ai.ConversationChanged();break;
                         case "aiDiscard": result=ai.Discard(message["proposalIds"]?.ToObject<string[]>());break;
                         case "aiCheckpoint": result = ai.CheckpointState(); break;
                         case "aiRestore": result = ai.RestoreCheckpoint((string)message["position"] == "before"); break;
-                        case "aiContext": var state=JObject.FromObject(ai.Context());state["checkpoint"]=JToken.FromObject(ai.CheckpointState());result=state;break;
+                        case "aiContext": var state=JObject.FromObject(ai.Context());state["checkpoint"]=JToken.FromObject(ai.CheckpointState());state["preferences"]=JObject.FromObject(new{settings.AiShowExplain,settings.AiShowGenerate,settings.AiShowAnalyze,settings.AiShowManualFormula});result=state;break;
                         case "aiOpenRecovery": var recovery=(string)JObject.FromObject(ai.CheckpointState())["folder"];if(recovery==null||!Directory.Exists(recovery))throw new InvalidOperationException("尚无完整备份。");System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", "\"" + recovery + "\""){UseShellExecute=false});result=new{message="已打开本地完整备份"};break;
                         case "aiCapture": result = await ai.CaptureAsync((string)message["scope"]); break;
-                        case "aiExtended": result=ai.Extended(message);break;
+                        case "aiExtended": result=await ai.ExtendedAsync(message);break;
                         case "aiHistory": result=ai.SnapshotHistory();break;
                         case "aiOpenVersion": result=ai.OpenVersion((string)message["versionId"]);break;
                         case "aiInspect": result=ai.Metadata((string)message["snapshotId"]);break;

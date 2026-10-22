@@ -1,6 +1,6 @@
 # 构建、测试与发布
 
-[文档首页](../README.md) · 适用 v2.0.0 · 2026-10-22
+[文档首页](../README.md) · 适用 v2.1.0 · 2026-10-22
 
 ## 开发环境
 
@@ -62,7 +62,7 @@ node .\tests\browser-ai.cjs
 node .\tests\native-ai-switch.cjs
 ```
 
-`native-ai-switch.cjs` 在独立临时目录注入测试 CDP，使用当前的 x64 packed XLL；这条测试本身不能验收 32 位 Excel。测试结束核对自己的 Excel／Electron 实例已退出，不终止用户已有 Excel。
+`native-ai-switch.cjs` 在独立临时目录注入测试 CDP，使用当前的 x64 packed XLL；设置 GRIDPILOT_TEST_PACKAGE 为已解压发布目录时，测试直接使用该包的 XLL、DLL 和运行时。这条测试本身不能验收 32 位 Excel。测试结束核对自己的 Excel／Electron 实例已退出，不终止用户已有 Excel。
 
 ## 真实 API 测试与密钥
 
@@ -100,3 +100,9 @@ try {
 ## v2.0 扩展验收
 
 `SheetPilot.Tests.exe --ai-extended --excel`、`--ai-chart-matrix`、`--ai-formats` 验证高级操作、完整图表矩阵、四种格式与 VBA 审批。`node tests/live-extended.cjs` 从 `GRIDPILOT_TEST_KEY_FILE` 指定的仓库外文件读取真实密钥，仅输出脱敏结果。Node SQLite 测试使用包内 Electron 的 Node 模式。
+
+## v2.1 专项
+
+`SheetPilot.Tests.exe --ai-v21 --excel` 验证预算淘汰、跨工作簿及隐藏表、批准隔离、新版工具。`tests/browser-v21-settings.cjs` 验证总设置；`tests/native-ai-switch.cjs` 验证真实原生风险确认框及窗口切换。`tests/live-v21.cjs` 使用仓库外 `GRIDPILOT_TEST_KEY_FILE`，真实模型读取两本合成工作簿和 VBA，并执行现代工具。
+
+依赖已缓存时可用 `build.ps1 -PackageSource C:/Users/<user>/.nuget/packages` 离线锁定恢复，不修改系统代理或依赖版本。

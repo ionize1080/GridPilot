@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Linq;
 using System.Collections.Generic;
@@ -9,11 +9,14 @@ namespace SheetPilot.Excel
     public sealed partial class AiOperations
     {
         private WorkbookSnapshotStore historyStore;
+        public int SnapshotBudgetMB { get; set; } = 500;
+        public void ApplySnapshotBudget() { History.BudgetBytes=(long)Math.Max(100,SnapshotBudgetMB)*1024*1024; History.Prune(); }
         private WorkbookSnapshotStore History => historyStore ?? (historyStore = new WorkbookSnapshotStore(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "GridPilot", "Recovery", "history-v2")));
         
-        private static readonly HashSet<string> ReadOperations = new HashSet<string> { "plugin.rename_preview", "workbook.describe", "workbook.list", "sheet.describe", "range.read", "range.trace", "vba.read", "chart.list", "chart.inspect", "pivot.list", "pivot.inspect", "snapshot.list", "table.list", "name.list", "note.list", "image.list" };
+        private static readonly HashSet<string> ReadOperations = new HashSet<string> { "capability.list", "range.spill", "comment.list", "query.list", "connection.list", "model.inspect", "slicer.list", "plugin.rename_preview", "workbook.describe", "workbook.list", "sheet.describe", "range.read", "range.trace", "vba.read", "chart.list", "chart.inspect", "pivot.list", "pivot.inspect", "snapshot.list", "table.list", "name.list", "note.list", "image.list" };
         private string SaveVersion(object book, string label)
         {
+            History.BudgetBytes=(long)Math.Max(100,SnapshotBudgetMB)*1024*1024;
             dynamic b = book; int format = Convert.ToInt32(b.FileFormat);
             string ext = format == 52 ? ".xlsm" : format == 50 ? ".xlsb" : format == 56 || format == -4143 ? ".xls" : format == 51 ? ".xlsx" : null;
             if (ext == null) throw new InvalidOperationException("请先另存为 xlsx、xlsm、xlsb 或 xls。");
@@ -22,7 +25,7 @@ namespace SheetPilot.Excel
             try { app.EnableEvents = false; b.SaveCopyAs(temp); string id = History.Save(temp, (string)b.Name, label); return id; }
             finally { app.EnableEvents = events; if (File.Exists(temp)) File.Delete(temp); }
         }
-        public object SnapshotHistory() => new { versions = History.List(), folder = History.Root };
+        public object SnapshotHistory() => new { versions = History.List(), folder = History.Root, usedBytes=History.UsedBytes, budgetBytes=History.BudgetBytes };
         public object OpenVersion(string id)
         {
             // Restore as a complete independent workbook: preserve unsaved edits and
@@ -38,6 +41,8 @@ namespace SheetPilot.Excel
             var snapshot = Get((string)request["snapshotId"]);
             string operation = (string)request["operation"];
             var options = request["options"] as JObject ?? new JObject();
+            CheckDiscoveryBoundary(snapshot,operation,options);
+            CheckModernCapability(snapshot,operation,options);
             if (ReadOperations.Contains(operation)) return ExecuteExtended(snapshot, operation, options);
             if (!ExtendedOperations.Contains(operation)) throw new InvalidOperationException("未知操作，请先查询 excel_help。");
             if ((bool)((dynamic)snapshot.book).ReadOnly) throw new InvalidOperationException("工作簿只读。");
@@ -80,12 +85,15 @@ namespace SheetPilot.Excel
             return new { message = "已应用并保留完整历史快照。", appliedIds = ids, retiredIds = ids, results, checkpoint = CheckpointState() };
         }
         private static readonly HashSet<string> ExtendedOperations = new HashSet<string>((
-            "workbook.create workbook.open workbook.export workbook.import workbook.settings sheet.create sheet.rename sheet.copy sheet.delete sheet.layout sheet.batch_rename " +
+            "range.formula2 range.calculate comment.add comment.reply comment.delete query.set query.delete slicer.filter slicer.clear slicer.timeline table.resize workbook.create workbook.open workbook.export workbook.import workbook.settings sheet.create sheet.rename sheet.copy sheet.delete sheet.layout sheet.batch_rename " +
             "range.write range.clear range.copy range.insert range.delete range.sort range.replace range.transform range.format range.merge range.conditional_format range.validation range.goal_seek " +
             "csv.import csv.export vba.write vba.delete table.create table.update table.delete name.set name.delete note.set note.delete image.insert image.delete sparkline.add sparkline.delete " +
             "plugin.rename plugin.sort_sheets plugin.convert plugin.copy plugin.segment plugin.simple_mask chart.create chart.edit chart.delete chart.series chart.trendline chart.errorbars pivot.create pivot.edit pivot.field pivot.filter pivot.sort pivot.group pivot.calculated pivot.refresh pivot.delete slicer.add slicer.delete snapshot.create").Split(' '));
         private object ExecuteExtended(Snapshot s, string operation, JObject o)
         {
+            CheckDiscoveryBoundary(s,operation,o);
+            CheckModernCapability(s,operation,o);
+            if(IsModernOperation(operation))return ModernOperation(s,operation,o);
             if (operation.StartsWith("plugin.")) return PluginOperation(s, operation, o);
             if (operation == "snapshot.list") { var versions=History.List().Where(v=>(string)v["book"]==s.bookName).ToArray();int offset=Math.Max(0,(int?)o["offset"]??0),limit=Math.Min(200,Math.Max(1,(int?)o["limit"]??50));return new{versions=versions.Skip(offset).Take(limit).ToArray(),total=versions.Length,nextOffset=offset+limit<versions.Length?(int?)(offset+limit):null}; }
             if (operation == "snapshot.create") return new { versionId = SaveVersion(s.book, (string)o["label"] ?? "手动快照") };

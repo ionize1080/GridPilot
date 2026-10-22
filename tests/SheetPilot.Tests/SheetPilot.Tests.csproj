@@ -5,6 +5,9 @@
   <ProjectReference Include="../../src/SheetPilot.UI/SheetPilot.UI.csproj"/>
   <Compile Include="../../src/SheetPilot.Excel/AdvancedSortOperations.cs" Link="AdvancedSortOperations.cs" />
   <Compile Include="../../src/SheetPilot.Excel/AiPluginTools.cs" Link="AiPluginTools.cs" />
+<Compile Include="../../src/SheetPilot.Excel/AiDiscovery.cs" Link="AiDiscovery.cs" />
+<Compile Include="../../src/SheetPilot.Excel/AiModernTools.cs" Link="AiModernTools.cs" />
+<Compile Include="../../src/SheetPilot.Excel/SnapshotBudget.cs" Link="SnapshotBudget.cs" />
 <Compile Include="../../src/SheetPilot.Excel/AiExtended.cs" Link="AiExtended.cs" />
 <Compile Include="../../src/SheetPilot.Excel/AiWorkbookTools.cs" Link="AiWorkbookTools.cs" />
 <Compile Include="../../src/SheetPilot.Excel/AiRangeTools.cs" Link="AiRangeTools.cs" />

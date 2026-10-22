@@ -9,7 +9,7 @@ namespace SheetPilot.Excel
 {
     // Immutable manifests + content-addressed compressed chunks. ZIP parts are split
     // before deduplication so recompressing an xlsx does not invalidate every chunk.
-    public sealed class WorkbookSnapshotStore
+    public sealed partial class WorkbookSnapshotStore
     {
         public string Root { get; }
         public WorkbookSnapshotStore(string root) { Root = Path.GetFullPath(root); Directory.CreateDirectory(Path.Combine(Root, "blobs")); Directory.CreateDirectory(Path.Combine(Root, "versions")); }
@@ -36,12 +36,19 @@ namespace SheetPilot.Excel
         }
         public string Save(string source, string book, string label)
         {
+            using(Transaction())
+            {
             string id = Guid.NewGuid().ToString("N"), extension = Path.GetExtension(source).ToLowerInvariant();
             var parts = new JArray(); bool zip = extension != ".xls";
             if (zip) using (var archive = ZipFile.OpenRead(source)) foreach (var entry in archive.Entries) using (var stream = entry.Open()) parts.Add(new JObject { ["name"] = entry.FullName, ["chunks"] = Put(stream) });
             else using (var stream = File.OpenRead(source)) parts.Add(new JObject { ["name"] = "workbook", ["chunks"] = Put(stream) });
-            var manifest = new JObject { ["id"] = id, ["book"] = book, ["label"] = label, ["created"] = DateTime.UtcNow.ToString("o"), ["extension"] = extension, ["zip"] = zip, ["parts"] = parts };
-            Atomic(Path.Combine(Root, "versions", id + ".json"), System.Text.Encoding.UTF8.GetBytes(manifest.ToString())); return id;
+            var newest=List().FirstOrDefault();DateTime created=DateTime.UtcNow;if(newest!=null){var last=newest["created"].Value<DateTime>();if(created<=last)created=last.AddTicks(1);}
+            var manifest = new JObject { ["id"] = id, ["book"] = book, ["label"] = label, ["created"] = created.ToString("o"), ["extension"] = extension, ["zip"] = zip, ["parts"] = parts };
+            Atomic(Path.Combine(Root, "versions", id + ".json"), System.Text.Encoding.UTF8.GetBytes(manifest.ToString()));
+            long ownSize = parts.SelectMany(p=>p["chunks"].Values<string>()).Distinct().Sum(h=>new FileInfo(Path.Combine(Root,"blobs",h+".gz")).Length) + new FileInfo(Path.Combine(Root,"versions",id+".json")).Length;
+            if(ownSize>BudgetBytes){File.Delete(Path.Combine(Root,"versions",id+".json"));Prune();throw new IOException("单个完整快照超过预算，未保留此版本。请在总设置中提高快照上限后重试。");}
+            Prune(); return id;
+            }
         }
         public JObject Manifest(string id)
         {
@@ -52,6 +59,7 @@ namespace SheetPilot.Excel
         {
             // Saving updates core timestamps even without an edit. All workbook,
             // sheet, style, VBA, pivot and drawing parts remain part of this guard.
+            using(Transaction()) {
             var parts = new JArray();
             foreach (var part in Manifest(id)["parts"].OrderBy(p => (string)p["name"]))
             {
@@ -71,7 +79,7 @@ namespace SheetPilot.Excel
                     parts.Add(new JObject { ["name"] = part["name"], ["hash"] = Hash(normalized) });
                 }
             }
-            return Hash(System.Text.Encoding.UTF8.GetBytes(parts.ToString(Newtonsoft.Json.Formatting.None)));
+            return Hash(System.Text.Encoding.UTF8.GetBytes(parts.ToString(Newtonsoft.Json.Formatting.None))); }
         }
         // Canonical stream contents, excluding allocation layout and save timestamps.
         // PROJECT protection bytes are decoded (MS-OVBA 2.4.3.3), so randomized
@@ -119,12 +127,34 @@ namespace SheetPilot.Excel
                         project=System.Text.RegularExpressions.Regex.Replace(project,@"(?m)^(CMG|DPB|GC)=""([A-Fa-f0-9]+)""",m=>m.Groups[1].Value+"="+DecodeProject(m.Groups[2].Value));
                         data=latin.GetBytes(project);
                     }
+                    if(name=="\u0005SummaryInformation")data=NormalizeSummarySaveTime(data);
                     entry["hash"]=Hash(data);
                 }
                 entries.Add(entry);if(type==1||type==5)visit(BitConverter.ToUInt32(dirs,at+76),path);
             };
             visit(BitConverter.ToUInt32(dirs,76),"");
             return System.Text.Encoding.UTF8.GetBytes(new JArray(entries.OrderBy(e=>(string)e["path"])).ToString(Newtonsoft.Json.Formatting.None));
+        }
+        // MS-OLEPS SummaryInformation PIDSI_LASTSAVE_DTM (0x0D) is updated
+        // by SaveCopyAs even without edits. Preserve every other property.
+        private static byte[] NormalizeSummarySaveTime(byte[] bytes)
+        {
+            var data=(byte[])bytes.Clone();
+            if(data.Length<48||BitConverter.ToUInt16(data,0)!=0xFFFE||BitConverter.ToUInt32(data,24)!=1)return data;
+            if(new Guid(data.Skip(28).Take(16).ToArray())!=new Guid("F29F85E0-4FF9-1068-AB91-08002B27B3D9"))return data;
+            uint section=BitConverter.ToUInt32(data,44);
+            if(section>data.Length-8)throw new IOException("无效摘要属性集。");
+            int at=(int)section;uint size=BitConverter.ToUInt32(data,at),count=BitConverter.ToUInt32(data,at+4);
+            if(size<8||size>data.Length-at||count>(size-8)/8)throw new IOException("无效摘要属性集。");
+            for(int i=0;i<count;i++)
+            {
+                int pair=at+8+i*8;if(BitConverter.ToUInt32(data,pair)!=13)continue;
+                uint offset=BitConverter.ToUInt32(data,pair+4);
+                if(size<12||offset>size-12)throw new IOException("无效摘要保存时间。");
+                int value=at+(int)offset;
+                if(BitConverter.ToUInt32(data,value)==0x40)Array.Clear(data,value+4,8);
+            }
+            return data;
         }
         private static string DecodeProject(string hex)
         {
@@ -148,6 +178,7 @@ namespace SheetPilot.Excel
         }
         public string Materialize(string id, string directory)
         {
+            using(Transaction()) {
             var manifest = Manifest(id); Directory.CreateDirectory(directory);
             string path = Path.Combine(directory, "Restore-" + id + "-" + Guid.NewGuid().ToString("N").Substring(0, 6) + (string)manifest["extension"]);
             try
@@ -156,8 +187,8 @@ namespace SheetPilot.Excel
                 else using (var output = new FileStream(path, FileMode.CreateNew)) Copy((JArray)manifest["parts"][0]["chunks"], output);
                 return path;
             }
-            catch { if (File.Exists(path)) File.Delete(path); throw; }
+            catch { if (File.Exists(path)) File.Delete(path); throw; } }
         }
-        public JArray List() => new JArray(Directory.GetFiles(Path.Combine(Root, "versions"), "*.json").Select(p => JObject.Parse(File.ReadAllText(p))).OrderByDescending(m => (string)m["created"]).Select(m => new JObject { ["id"] = m["id"], ["book"] = m["book"], ["label"] = m["label"], ["created"] = m["created"] }));
+        public JArray List() { using(Transaction()) return new JArray(Directory.GetFiles(Path.Combine(Root, "versions"), "*.json").Select(p => JObject.Parse(File.ReadAllText(p))).OrderByDescending(m => m["created"].Value<DateTime>()).Select(m => new JObject { ["id"] = m["id"], ["book"] = m["book"], ["label"] = m["label"], ["created"] = m["created"] })); }
     }
 }

@@ -22,8 +22,8 @@ namespace SheetPilot.Excel
         };
         private static int ChartType(JToken token)
         {
-            int type; if (token?.Type == JTokenType.Integer) type = (int)token; else if (!Excel2010Charts.TryGetValue((string)token ?? "column", out type)) throw new ArgumentException("未知图表类型，请查询 chart.create 帮助。");
-            if (!Excel2010Charts.Values.Contains(type)) throw new ArgumentException("图表类型不属于 Excel 2010。"); return type;
+            int type; if (token?.Type == JTokenType.Integer) type = (int)token; else if (!Excel2010Charts.TryGetValue((string)token ?? "column", out type) && !ModernCharts.TryGetValue((string)token, out type)) throw new ArgumentException("未知图表类型，请查询 chart.create 帮助。");
+            if (!Excel2010Charts.Values.Contains(type) && !ModernCharts.Values.Contains(type)) throw new ArgumentException("未知图表类型。"); return type;
         }
         private const string ChartProperties = "Name Text Caption Formula Left Top Width Height Position IncludeInLayout Visible Color ColorIndex RGB ThemeColor TintAndShade Transparency Weight DashStyle Style Size Bold Italic Underline Strikethrough Orientation HorizontalAlignment VerticalAlignment AutoScaleFont FontStyle Shadow GlowRadius SoftEdgeRadius HasTitle HasLegend ChartType ChartStyle PlotBy DisplayBlanksAs PlotVisibleOnly Rotation Elevation Perspective RightAngleAxes DepthPercent HeightPercent GapDepth AutoScaling RoundedCorners HasAxis AxisGroup HasDataLabels HasErrorBars Smooth InvertIfNegative Explosion MarkerStyle MarkerSize MarkerForegroundColor MarkerBackgroundColor MarkerForegroundColorIndex MarkerBackgroundColorIndex BorderColor SchemeColor Pattern PatternColor LineStyle MinimumScale MaximumScale MinimumScaleIsAuto MaximumScaleIsAuto MajorUnit MinorUnit MajorUnitIsAuto MinorUnitIsAuto ScaleType LogBase Crosses CrossesAt ReversePlotOrder TickLabelPosition MajorTickMark MinorTickMark HasMajorGridlines HasMinorGridlines CategoryType BaseUnit MajorUnitScale MinorUnitScale BaseUnitIsAuto DisplayUnit DisplayUnitCustom HasDisplayUnitLabel NumberFormat NumberFormatLinked Offset Spacing ReadingOrder MultiLevel TickLabelSpacing TickMarkSpacing HasMultiLevelLabels ShowValue ShowCategoryName ShowSeriesName ShowLegendKey ShowPercentage ShowBubbleSize Separator Type Order Period Forward Backward Intercept InterceptIsAuto DisplayEquation DisplayRSquared LegendKey BubbleScale GapWidth Overlap VaryByCategories HasDropLines HasHiLoLines HasUpDownBars SplitType SplitValue SecondPlotSize DoughnutHoleSize FirstSliceAngle EndStyle CapStyle JoinStyle BeginArrowheadStyle EndArrowheadStyle BeginArrowheadLength EndArrowheadLength BeginArrowheadWidth EndArrowheadWidth";
         private static readonly HashSet<string> ChartChildren = new HashSet<string>(("ChartArea PlotArea ChartTitle Legend Font Format Fill Line ForeColor BackColor Border Interior TickLabels AxisTitle MajorGridlines MinorGridlines DataLabel DisplayUnitLabel ErrorBars LeaderLines DataTable Walls Floor UpBars DownBars DropLines HiLoLines Shadow Glow SoftEdge TextFrame2 TextRange ParagraphFormat").Split(' '), StringComparer.OrdinalIgnoreCase);
@@ -38,9 +38,14 @@ namespace SheetPilot.Excel
                 if (op == "chart.create")
                 {
                     int type = ChartType(o["type"]); string address = Required(o, "address"); AiRange.Parse(address);
-                    container = ((dynamic)charts).Add((double?)o["left"] ?? 30, (double?)o["top"] ?? 30, (double?)o["width"] ?? 480, (double?)o["height"] ?? 280);
+                    if(ModernCharts.Values.Contains(type)) {
+                        dynamic app=application();object shapes=((dynamic)sheet).Shapes,sourceRange=((dynamic)sheet).Range[address],previousSheet=app.ActiveSheet,previousSelection=app.Selection;
+                        try { ((dynamic)s.book).Activate();((dynamic)sheet).Activate();((dynamic)sourceRange).Select();container=((dynamic)shapes).AddChart2(-1,type,(double?)o["left"]??30,(double?)o["top"]??30,(double?)o["width"]??480,(double?)o["height"]??280); }
+                        finally {try{if(previousSheet!=null)((dynamic)previousSheet).Activate();if(previousSelection!=null)((dynamic)previousSelection).Select();}finally{Release(previousSelection);Release(previousSheet);Release(sourceRange);Release(shapes);}}
+                    }
+                    else container = ((dynamic)charts).Add((double?)o["left"] ?? 30, (double?)o["top"] ?? 30, (double?)o["width"] ?? 480, (double?)o["height"] ?? 280);
                     if (o["name"] != null) ((dynamic)container).Name = (string)o["name"];
-                    chart = ((dynamic)container).Chart; object source = ((dynamic)sheet).Range[address]; try { ((dynamic)chart).SetSourceData(source); ((dynamic)chart).ChartType = type; } finally { Release(source); }
+                    chart = ((dynamic)container).Chart; object source = ((dynamic)sheet).Range[address]; try { if(!ModernCharts.Values.Contains(type)){((dynamic)chart).SetSourceData(source);((dynamic)chart).ChartType = type;} } finally { Release(source); }
                     if (o["title"] != null) { ((dynamic)chart).HasTitle = true; ((dynamic)chart).ChartTitle.Text = (string)o["title"]; }
                     return ChartState(container);
                 }

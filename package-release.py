@@ -3,7 +3,7 @@ from pathlib import Path
 import gzip, hashlib, html.parser, json, shutil, zipfile
 
 ROOT = Path(__file__).resolve().parent
-VERSION = '2.0.0'
+VERSION = '2.1.0'
 OUT = ROOT / ('release-v' + VERSION)
 DOCS = ['README.md', 'Check-Environment.ps1'] + [p.relative_to(ROOT).as_posix() for p in sorted((ROOT/'docs').rglob('*')) if p.is_file() and p.suffix.lower() in ('.md','.txt','.png','.jpg')]
 
