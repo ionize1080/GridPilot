@@ -22,6 +22,11 @@ class Text(html.parser.HTMLParser):
 def digest(file):
     return hashlib.sha256(file.read_bytes()).hexdigest()
 
+def payload_files(base):
+    # A verification run can create caches after staging. Exclude them both
+    # when copying and at the final manifest/archive boundary.
+    return sorted(p for p in base.rglob('*') if p.is_file() and '__pycache__' not in p.parts and p.suffix != '.pyc')
+
 def package():
     OUT.mkdir(exist_ok=True)
     notices = []
@@ -52,11 +57,11 @@ def package():
             for name in DOCS:
                 (base / name).parent.mkdir(parents=True,exist_ok=True)
                 shutil.copy2(ROOT / name, base / name)
-            (base / 'SHA256SUMS.txt').write_text(''.join(digest(p) + '  ' + p.relative_to(base).as_posix() + '\n' for p in sorted(base.rglob('*')) if p.is_file()), encoding='ascii')
+            (base / 'SHA256SUMS.txt').write_text(''.join(digest(p) + '  ' + p.relative_to(base).as_posix() + '\n' for p in payload_files(base) if p.name != 'SHA256SUMS.txt'), encoding='ascii')
         archive = OUT / ('GridPilot-' + VERSION + '-' + suffix + '-win-x64.zip')
         with zipfile.ZipFile(archive, 'w', zipfile.ZIP_DEFLATED, compresslevel=6) as z:
-            for file in sorted(base.rglob('*')):
-                if file.is_file(): z.write(file, file.relative_to(OUT))
+            for file in payload_files(base):
+                z.write(file, file.relative_to(OUT))
         with zipfile.ZipFile(archive) as z:
             assert z.testzip() is None
             names = z.namelist()
@@ -68,7 +73,7 @@ def package():
             assert len([n for n in names if n.endswith('.xll')]) == 2
             # Chatbox's native third-party attribution remains in both packages.
             assert any(n.endswith('/Chatbox/provenance.json') for n in names)
-            if clean: assert not any('/docs/' in n and '/Chatbox/' not in n for n in names)
+            if clean: assert not any(n.startswith(base.name + '/docs/') for n in names)
         print(archive.name, archive.stat().st_size, digest(archive), flush=True)
     (OUT / 'SHA256SUMS.txt').write_text(''.join(digest(p) + '  ' + p.name + '\n' for p in sorted(OUT.glob('*.zip'))), encoding='ascii')
 

@@ -13,7 +13,7 @@ for source in (ROOT/'bridge').glob('*.py'):
     assert sha(source)==sha(base/'bridge'/source.name),source.name
 for name in ['bootstrap.cjs','tools.cjs','catalog.cjs','stdio.cjs','workspace-main.cjs']:
     assert sha(ROOT/'integrations/chatbox'/name)==sha(base/'Chatbox'/name),name
-provenance=json.loads((base/'Chatbox/provenance.json').read_text())
+provenance=json.loads((base/'Chatbox/provenance.json').read_text(encoding='utf-8'))
 last={p['file']:p['patchedSha256'] for p in provenance['patches']}
 for name,digest in last.items():assert sha(base/'Chatbox/native'/name)==digest,name
 for file in [base/'Chatbox/bootstrap.cjs',*(base/'bridge').glob('*.py'),*(base/'App').glob('*.js')]:
@@ -27,7 +27,7 @@ for file in base.iterdir():
 manifest=base/'SHA256SUMS.txt'
 if manifest.exists():
     checked=0
-    for line in manifest.read_text().splitlines():
+    for line in manifest.read_text(encoding='ascii').splitlines():
         digest,relative=line.split('  ',1)
         path=(base/relative).resolve()
         assert path.is_relative_to(base.resolve()),relative
