@@ -6,7 +6,7 @@
 
 GridPilot 是 Windows 桌面 Excel 的便携工具集：用 AI 助手分析表格、生成公式和图表，用预览与快照管理变更，也可以离线完成排序、导航、复制、脱敏和报表核对。
 
-**当前正式版：v2.2.0** · 文档更新：2026-11-17
+**当前正式版：v2.2.1** · 文档更新：2026-11-17
 
 [下载正式版](https://github.com/ionize1080/GridPilot/releases/latest) · [快速开始](docs/guides/QUICKSTART.md) · [AI 助手指南](docs/guides/AI.md) · [全部文档](docs/README.md) · [更新记录](docs/releases/README.md)
 
@@ -77,6 +77,12 @@ flowchart LR
 - AI 对话会将所选范围的上下文样本、工具返回结果及主动添加的附件发送到你配置的模型服务。完整本地快照和 Recovery 副本不会自动作为附件发送。
 - 「不附加」停止自动加入新的 Excel 上下文，不会删除已有对话中的数据。密钥与聊天配置由独立的本地 Chatbox 配置管理，不随便携发布包分发。
 - 备份、数据库和还原记录可能含原始数据。保存位置、清理方法和共享边界见 [数据与存储](docs/guides/DATA-AND-STORAGE.md)。
+
+## v2.2.1 的变化
+
+修复 Excel 窄侧栏中的按钮拥挤：工作区与上下文独立成行，模型按钮保留空间。移除底部提示并收紧纵向留白，输入框随内容增长。已在真实 Excel 中测试窗口切换及草稿保留。
+
+[界面优化发布说明](docs/releases/RELEASE-v2.2.1.md) · [验证记录](docs/v2.2/COMPOSER-FIX.md)。
 
 ## v2.2.0 的变化
 

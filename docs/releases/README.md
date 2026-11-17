@@ -2,10 +2,11 @@
 
 [文档首页](../README.md) · [下载最新正式版](https://github.com/ionize1080/GridPilot/releases/latest)
 
-**当前正式版 v2.2.0**。下列页面保留每次发布时的功能和验证，不把旧限制当成当前行为；使用方法请查 [当前指南](../README.md)。
+**当前正式版 v2.2.1**。下列页面保留每次发布时的功能和验证，不把旧限制当成当前行为；使用方法请查 [当前指南](../README.md)。
 
 | 版本 | 发布说明 | 设计／验证 |
 | --- | --- | --- |
+| v2.2.1 | [输入区布局与纵向空间](RELEASE-v2.2.1.md) | [验证记录](../v2.2/COMPOSER-FIX.md) |
 | v2.2.0 | [参考工作区与 Excel 底稿](RELEASE-v2.2.0.md) | [验证与边界](../v2.2/VALIDATION.md) |
 | v2.1.0 | [自动上下文、快照预算与新版 Office](RELEASE-v2.1.0.md) | [验证与边界](../v2.1/VALIDATION.md) |
 | v2.0.0 | [完整 Excel 操作与多版本快照](RELEASE-v2.0.0.md) | [验证与边界](../v2.0/VALIDATION.md) |
