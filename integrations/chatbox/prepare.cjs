@@ -61,10 +61,12 @@ window.gridpilotCaptureMessage=async message=>{
 };
 `);
 patches.push({file:'dist/renderer/js/index.TlLbGKvw.js',originalSha256:readinessBefore,patchedSha256:hash(renderer),append:'Wait for native GridPilot MCP schema discovery before the first model request; never synthesize tool calls from text.'});
+function append(relative,content){const file=path.join(native,relative),originalSha256=hash(file);fs.appendFileSync(file,content);patches.push({file:relative,originalSha256,patchedSha256:hash(file),append:'workspace integration'});}
+require('./patch-workspace.cjs').apply(patch,append);
 const preload=path.join(native,'dist/preload/index.js'),original=hash(preload);
 fs.appendFileSync(preload,'\n'+fs.readFileSync(path.join(__dirname,'preload.cjs'),'utf8'));
 patches.push({file:'dist/preload/index.js',originalSha256:original,patchedSha256:hash(preload),append:'integrations/chatbox/preload.cjs'});
-for(const name of ['bootstrap.cjs','tools.cjs','catalog.cjs','stdio.cjs','LICENSE-GPL-3.0.txt'])fs.copyFileSync(path.join(__dirname,name),path.join(out,name));
+for(const name of ['bootstrap.cjs','tools.cjs','catalog.cjs','stdio.cjs','workspace-main.cjs','LICENSE-PAGEPILOT.txt','LICENSE-GPL-3.0.txt'])fs.copyFileSync(path.join(__dirname,name),path.join(out,name));
 fs.cpSync(path.join(__dirname,'node_modules'),path.join(out,'node_modules'),{recursive:true});
 fs.cpSync(path.join(extracted,'resources/app.asar.unpacked'),path.join(out,'resources/app.asar.unpacked'),{recursive:true});
 fs.writeFileSync(path.join(out,'package.json'),JSON.stringify({name:packageData.name,productName:packageData.productName,version:'1.20.3',private:true,main:'bootstrap.cjs'}));

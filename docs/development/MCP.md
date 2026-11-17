@@ -1,6 +1,6 @@
 # Excel MCP：精简入口，按需发现
 
-[文档首页](../README.md) · v2.1.0 · 2026-10-22
+[文档首页](../README.md) · v2.2.0 · 2026-11-17
 
 13 个公开工具：原有 10 个读取／建议工具，加 `excel_context`、`excel_help` 和 `excel_operation`。高级目录按需返回，不放进每轮工具描述；当前包含 99 个操作。目录不随每轮发送。
 
@@ -180,3 +180,15 @@ MCP 使用官方 SDK stdio，提供 `gridpilot://guide` Resource 和 `excel-work
 官方核验：[Formula2](https://learn.microsoft.com/en-us/office/vba/api/excel.range.formula2)、[HasSpill](https://learn.microsoft.com/en-us/office/vba/api/excel.range.hasspill)、[Queries](https://learn.microsoft.com/en-us/office/vba/api/excel.workbook.queries)、[CommentThreaded](https://learn.microsoft.com/en-us/office/vba/api/excel.range.commentthreaded)、[AddChart2](https://learn.microsoft.com/en-us/office/vba/api/excel.shapes.addchart2)、[XlChartType](https://learn.microsoft.com/en-us/office/vba/api/excel.xlcharttype)。
 
 自动/所有工作簿模式的最大读取范围为目录创建时当前 Excel 进程已打开的工作簿及 VBA。workbook.open/import、目录文件枚举、CSV 导入和磁盘图片读取在这些模式中被拒绝；新打开的文件需重新发送以创建目录。恢复、批准与宏执行始终不属于模型工具。
+
+## v2.2 参考工作区 MCP
+
+独立 `GridPilot Workspace` stdio 服务新增 12 个工具：`workspace_info`、`workspace_list`、`workspace_find`、`workspace_outline`、`workspace_read`、`workspace_read_batch`、`workspace_search`、`workspace_view`、`workspace_analyze`、`workspace_excel_info`、`workspace_excel_read`、`workspace_excel_edit`。完整 schema 见 [工具目录](../v2.2/workspace-tool-inventory.json)。Resource 为 `gridpilot://workspace-guide`。
+
+工作区 ID 附在最新用户消息的模型上下文中；首次发送先绑定工作区，再创建会话界面。不要使用其他会话 ID。清空立即撤销旧 ID，撤销恢复原引用并保留新增资料。清空/撤销、文件授权及打开底稿只由 UI 触发，不暴露给模型。
+
+`workspace_read` 的 next 包含下一段 start/offset，结合 expected_revision 可读完整长单元格、长段落和全部语义单元，next=null 才表示读完。outline 的 preview 不是正文；find 的深度/预算限制不代表全局搜索完毕。模型上下文仍有限，应先查找/统计，再读取相关段落。
+
+MCP 图片返回标准 image 内容块；集成层在 Chat Completions 工具结果之后加入视觉消息，保留并行工具配对。流式工具名和参数支持拆分增量，未结束参数不会执行。
+
+`GRIDPILOT_MCP_READ_ONLY=1` 同时隐藏并禁止工作区分析副本创建；`GRIDPILOT_MCP_TOOLS` 仍只控制 Excel 服务。不会自动解析/上传目录中的全部文件。

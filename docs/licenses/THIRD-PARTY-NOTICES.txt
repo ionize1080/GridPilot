@@ -45,3 +45,17 @@ Commit 41c484b6930df70d7e783be6eaa170c6e484e7a0.
 AiRange.cs adapts bounded A1 reference parsing and hex-color validation from
 refs.py / formatting.py. Native Excel operations use GridPilot's COM adapter.
 See EXCEL-MCP-LICENSE.txt. The full upstream Python server is not bundled.
+
+GridPilot v2.2 reference workspace
+Adapted from ionize1080/PagePilot (GPL-3.0), commit 01f5e69c799c4fdeb7b28c444450f1e9e1318fee.
+https://github.com/ionize1080/PagePilot/tree/01f5e69c799c4fdeb7b28c444450f1e9e1318fee
+Changes add clear/undo, in-host Excel opening, more formats, full long-cell reads and a new theme.
+GPL text: Chatbox/LICENSE-PAGEPILOT.txt. Source: bridge/ and integrations/chatbox/workspace-*.
+Python 3.12.10 embedded Windows amd64 (PSF license); Python/LICENSE.txt retained.
+Python archive SHA256: 4ACBED6DD1C744B0376E3B1CF57CE906F9DC9E95E68824584C8099A63025A3C3.
+Dependencies pinned in requirements-workspace-lock.txt; bundled package licenses and metadata
+remain in Python/Lib/site-packages, including FastMCP, MCP, Pillow, pypdfium2/PDFium, openpyxl,
+python-docx, python-pptx, lxml, xlrd, pyxlsb, XlsxWriter and pywin32.
+Design references (no Apple artwork or fonts redistributed):
+https://developer.apple.com/design/human-interface-guidelines/color
+https://developer.apple.com/design/human-interface-guidelines/materials

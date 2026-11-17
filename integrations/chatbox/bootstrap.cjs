@@ -11,6 +11,9 @@ const pipe = process.argv.find(v=>v.startsWith('--gridpilot-pipe='))?.split('=')
 if (!/^GridPilot-[a-f0-9]{32}$/.test(pipe || '')) throw Error('请从GridPilot打开Chatbox。');
 const socket = net.createConnection('\\\\.\\pipe\\'+pipe), pending = new Map();
 let sequence=0, primary,displayMode='window';
+const workspaceFolder=path.join(app.getPath('userData'),'Workspaces');
+const workspaceRoot=path.resolve(__dirname,'..');
+const workspaceStore=require('./workspace-main.cjs').install({ipcMain,dialog:require('electron').dialog,primary:()=>primary,folder:workspaceFolder,root:workspaceRoot,openWorkbook:file=>host({action:'aiOpenWorkspace',path:file})});
 function applyMode(mode){
   displayMode=mode;if(!primary)return;
   const docked=mode==='sidebar';primary.setHasShadow(!docked);primary.setSkipTaskbar(docked);primary.setMovable(!docked);primary.setMaximizable(!docked);primary.setMinimizable(!docked);
@@ -63,8 +66,8 @@ function withBridge(value){
   value=value||{};
   const servers=value.mcp?.servers||[], previous=servers.find(s=>s.id==='gridpilot-excel');
   return {...value,autoUpdate:false,mcp:{...value.mcp,enabledBuiltinServers:value.mcp?.enabledBuiltinServers||[],
-    servers:[...servers.filter(s=>s.id!=='gridpilot-excel'),{id:'gridpilot-excel',name:'GridPilot Excel',enabled:previous?.enabled??true,
-      transport:{type:'stdio',command:process.execPath,args:[path.join(__dirname,'stdio.cjs')],env:{ELECTRON_RUN_AS_NODE:'1',GRIDPILOT_MCP_PIPE:bridgePipe,GRIDPILOT_MCP_TOKEN:token}}}]}};
+    servers:[...servers.filter(s=>!['gridpilot-excel','gridpilot-workspace'].includes(s.id)),{id:'gridpilot-excel',name:'GridPilot Excel',enabled:previous?.enabled??true,
+      transport:{type:'stdio',command:process.execPath,args:[path.join(__dirname,'stdio.cjs')],env:{ELECTRON_RUN_AS_NODE:'1',GRIDPILOT_MCP_PIPE:bridgePipe,GRIDPILOT_MCP_TOKEN:token}}},{id:'gridpilot-workspace',name:'GridPilot Workspace',enabled:servers.find(s=>s.id==='gridpilot-workspace')?.enabled??true,transport:{type:'stdio',command:path.join(workspaceRoot,'Python/python.exe'),args:[path.join(workspaceRoot,'bridge/workspace_server.py')],env:{GRIDPILOT_WORKSPACES:workspaceFolder,PYTHONIOENCODING:'utf-8'}}}]}};
 }
 // Decorate native storage reads; leave every original setting and setting page
 // in Chatbox. Other native/custom MCP servers retain their original entries.

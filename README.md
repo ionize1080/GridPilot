@@ -6,7 +6,7 @@
 
 GridPilot 是 Windows 桌面 Excel 的便携工具集：用 AI 助手分析表格、生成公式和图表，用预览与快照管理变更，也可以离线完成排序、导航、复制、脱敏和报表核对。
 
-**当前正式版：v2.1.0** · 文档更新：2026-10-22
+**当前正式版：v2.2.0** · 文档更新：2026-11-17
 
 [下载正式版](https://github.com/ionize1080/GridPilot/releases/latest) · [快速开始](docs/guides/QUICKSTART.md) · [AI 助手指南](docs/guides/AI.md) · [全部文档](docs/README.md) · [更新记录](docs/releases/README.md)
 
@@ -14,6 +14,7 @@ GridPilot 是 Windows 桌面 Excel 的便携工具集：用 AI 助手分析表�
 
 | 想做什么 | GridPilot 提供什么 | 使用说明 |
 | --- | --- | --- |
+| 管理参考资料、跨文件分析 | 会话独立工作区、95 种扩展名、分页/视觉读取、清空与撤销、底稿在当前 Excel 打开 | [参考工作区](docs/guides/WORKSPACES.md) |
 | 分析当前表格、写公式 | 13 个精简工具入口，按需发现工作簿、透视表、73 种图表、VBA 与插件操作 | [AI 助手](docs/guides/AI.md) |
 | 连续应用 AI 建议 | 独立批准开关、危险 VBA 强制手动批准、多版本完整快照 | [批准与恢复](docs/guides/AI.md#批准与恢复) |
 | 按业务逻辑排列记录 | 最多 20 层联动排序，中文数字、自定义序列、自然顺序、预览与恢复原序 | [多级排序](docs/guides/SORTING.md) |
@@ -77,11 +78,17 @@ flowchart LR
 - 「不附加」停止自动加入新的 Excel 上下文，不会删除已有对话中的数据。密钥与聊天配置由独立的本地 Chatbox 配置管理，不随便携发布包分发。
 - 备份、数据库和还原记录可能含原始数据。保存位置、清理方法和共享边界见 [数据与存储](docs/guides/DATA-AND-STORAGE.md)。
 
-## v2.1.0 的变化
+## v2.2.0 的变化
 
-默认自动上下文，按需读取所有打开工作簿及 VBA；全工作簿模式逐本核对。快照默认 500 MB 预算，最低 100 MB，超额自动清理旧版本。总设置可隐藏新手快捷入口。开启自动批准新增原生风险确认框。新增按 Excel 版本及实际接口启用的动态数组、线程批注、查询定义、切片器和现代图表操作。
+新增参考工作区：本机文件与文件夹、虚拟文件夹、拖放和多选整理；每个会话独立保存。可一键清空引用，再撤销恢复，源文件始终保留。分析底稿可直接在当前 Excel 中打开。
 
-[发布说明](docs/releases/RELEASE-v2.1.0.md) · [测试与边界](docs/v2.1/VALIDATION.md)。
+新增 12 个工作区 MCP 工具，覆盖目录、递归查找、结构、分页全文、批量片段、图片/PDF 视觉读取及分析副本。支持 95 种扩展名，修复长单元格内容截断；图片和扫描页需要视觉模型，XLSB 返回缓存值并明确不含公式文本。
+
+界面采用中性底色与绿色强调、清晰的文字层级，适配深浅色、窄侧栏、减少动态效果和增强对比度。发布包须保留新增的 `Python/` 与 `bridge/`，无需用户另装 Python。
+
+<img src="docs/v2.2/workspace-360.png" width="347" alt="v2.2 参考工作区，清空只移除引用"> <img src="docs/v2.2/workspace-dark.png" width="450" alt="v2.2 深色工作区">
+
+[发布说明](docs/releases/RELEASE-v2.2.0.md) · [工作区指南](docs/guides/WORKSPACES.md) · [测试与边界](docs/v2.2/VALIDATION.md)。
 
 ## 开发与文档
 

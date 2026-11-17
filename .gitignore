@@ -18,3 +18,5 @@ release-v*/
 **/test-profile/
 **/ui-profile/
 **/Recovery/
+
+**/__pycache__/

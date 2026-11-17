@@ -1,6 +1,6 @@
 # 构建、测试与发布
 
-[文档首页](../README.md) · 适用 v2.1.0 · 2026-10-22
+[文档首页](../README.md) · 适用 v2.2.0 · 2026-11-17
 
 ## 开发环境
 
@@ -15,6 +15,7 @@
 ```powershell
 powershell -NoProfile -File .\prepare-browser.ps1
 powershell -NoProfile -File .\prepare-chatbox.ps1
+powershell -NoProfile -File .\prepare-workspace.ps1
 powershell -NoProfile -File .\build.ps1
 ```
 
@@ -106,3 +107,17 @@ try {
 `SheetPilot.Tests.exe --ai-v21 --excel` 验证预算淘汰、跨工作簿及隐藏表、批准隔离、新版工具。`tests/browser-v21-settings.cjs` 验证总设置；`tests/native-ai-switch.cjs` 验证真实原生风险确认框及窗口切换。`tests/live-v21.cjs` 使用仓库外 `GRIDPILOT_TEST_KEY_FILE`，真实模型读取两本合成工作簿和 VBA，并执行现代工具。
 
 依赖已缓存时可用 `build.ps1 -PackageSource C:/Users/<user>/.nuget/packages` 离线锁定恢复，不修改系统代理或依赖版本。
+
+## v2.2 工作区验证
+
+`prepare-workspace.ps1` 校验官方 Python 3.12.10 嵌入运行时，按 `requirements-workspace-lock.txt` 准备依赖。最终包额外包含 `Python/` 和 `bridge/`，无需用户安装 Python。
+
+- `dist/Python/python.exe tests/workspace_regression.py`：解析、分页、修订、来源边界、分析和公式。
+- `dist/Python/python.exe tests/workspace-formats.py`：格式族、95 种扩展名、长单元格、stdio Resource 和只读策略；包含独立 Excel 生成的二进制/模板测试。
+- `dist/Python/python.exe tests/workspace_excel_regression.py`：真实后台 Excel、透视表、现代函数、源保护、失败处理和进程退出。
+- 分别运行 `node tests/workspace-store.cjs`、`workspace-clear.cjs`、`workspace-session.cjs`、`workspace-stream.cjs`、`workspace_vision.cjs`：持久化、清空撤销、首次发送、流式工具参数和图片传递。
+- `dist/Browser/electron.exe tests/workspace-ui.cjs`：320/360/480/900 窗口、深浅色、整理、清空撤销、导出和打开按钮。Windows GUI 应使用 Start-Process -Wait 获取真实退出码。
+- `SheetPilot.Tests.exe --ai-workspace`：同一 Excel 实例打开底稿、保留未保存源工作簿及批准隔离。
+- `tests/browser-ai.cjs`：真实 Chatbox + 本地模拟模型 + 两个真实 stdio MCP 服务，验证首次发送、按需 PDF 读取与原有建议流程。
+
+工作区适配自 PagePilot commit `01f5e69c799c4fdeb7b28c444450f1e9e1318fee`，见第三方说明。用户配置不随包发布。

@@ -187,6 +187,7 @@ namespace SheetPilot.Excel
                         case "aiExtended": result=await ai.ExtendedAsync(message);break;
                         case "aiHistory": result=ai.SnapshotHistory();break;
                         case "aiOpenVersion": result=ai.OpenVersion((string)message["versionId"]);break;
+                        case "aiOpenWorkspace": result=ai.OpenWorkspacePaper((string)message["path"]);break;
                         case "aiInspect": result=ai.Metadata((string)message["snapshotId"]);break;
                         case "aiRead": result = ai.Read(message); break;
                         case "aiPropose": result = ai.Propose(message); break;

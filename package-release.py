@@ -3,9 +3,9 @@ from pathlib import Path
 import gzip, hashlib, html.parser, json, shutil, zipfile
 
 ROOT = Path(__file__).resolve().parent
-VERSION = '2.1.0'
+VERSION = '2.2.0'
 OUT = ROOT / ('release-v' + VERSION)
-DOCS = ['README.md', 'Check-Environment.ps1'] + [p.relative_to(ROOT).as_posix() for p in sorted((ROOT/'docs').rglob('*')) if p.is_file() and p.suffix.lower() in ('.md','.txt','.png','.jpg')]
+DOCS = ['README.md', 'Check-Environment.ps1'] + [p.relative_to(ROOT).as_posix() for p in sorted((ROOT/'docs').rglob('*')) if p.is_file() and p.suffix.lower() in ('.md','.txt','.png','.jpg','.json')]
 
 class Text(html.parser.HTMLParser):
     def __init__(self):
@@ -42,8 +42,8 @@ def package():
         base.mkdir()
         for file in (ROOT / 'dist').iterdir():
             if file.is_file() and file.suffix in ('.dll', '.xll'): shutil.copy2(file, base / file.name)
-        for folder in ('App', 'Browser', 'Resources', 'Chatbox'):
-            shutil.copytree(ROOT / 'dist' / folder, base / folder)
+        for folder in ('App', 'Browser', 'Resources', 'Chatbox', 'Python', 'bridge'):
+            shutil.copytree(ROOT / 'dist' / folder, base / folder, ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
         if clean:
             # License texts remain bundled and readable in Settings > About. Dictionary .txt files are runtime data.
             for name in ('LICENSE', 'LICENSES.chromium.html', 'version'):
@@ -62,6 +62,9 @@ def package():
             names = z.namelist()
             assert any(n.endswith('/App/legal.bin') for n in names)
             assert any(n.endswith('/Browser/electron.exe') for n in names)
+            assert any(n.endswith('/Python/python.exe') for n in names)
+            assert any(n.endswith('/bridge/workspace_server.py') for n in names)
+            assert any(n.endswith('/Chatbox/LICENSE-PAGEPILOT.txt') for n in names)
             assert len([n for n in names if n.endswith('.xll')]) == 2
             # Chatbox's native third-party attribution remains in both packages.
             assert any(n.endswith('/Chatbox/provenance.json') for n in names)

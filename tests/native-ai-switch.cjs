@@ -6,7 +6,7 @@ fs.mkdirSync(path.join(stage,'ui-profile'));fs.writeFileSync(path.join(stage,'ui
 const packageRoot=process.env.GRIDPILOT_TEST_PACKAGE;
 const runtime=packageRoot||path.join(root,'dist'),chatSource=packageRoot?path.join(packageRoot,'Chatbox'):path.join(root,'.temp/Chatbox');
 const link=(target,dest)=>fs.symlinkSync(target,dest,'junction');
-for(const folder of ['Browser','App','Resources'])link(path.join(runtime,folder),path.join(stage,folder));
+for(const folder of ['Browser','App','Resources','Python','bridge'])link(path.join(runtime,folder),path.join(stage,folder));
 for(const folder of ['native','node_modules','resources'])link(path.join(chatSource,folder),path.join(chat,folder));
 for(const file of fs.readdirSync(chatSource).filter(n=>/\.cjs$|^package.json$/.test(n)))fs.copyFileSync(path.join(chatSource,file),path.join(chat,file));
 const bootstrap=path.join(chat,'bootstrap.cjs');fs.writeFileSync(bootstrap,fs.readFileSync(bootstrap,'utf8').replace("const {app, ipcMain, BrowserWindow} = require('electron');","const {app, ipcMain, BrowserWindow} = require('electron'); app.commandLine.appendSwitch('remote-debugging-port','19331'); app.on('browser-window-created',(_e,w)=>{w.webContents.on('preload-error',(_e,p,e)=>require('node:fs').appendFileSync(require('node:path').join(__dirname,'preload-test.log'),p+' '+e.stack));});"));

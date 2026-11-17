@@ -12,12 +12,43 @@ const modelServer=http.createServer((req,res)=>{
   let text='';req.on('data',d=>text+=d);req.on('end',()=>{
     if(req.method==='GET'){res.setHeader('Content-Type','application/json');res.end(JSON.stringify({object:'list',data:[{id:'gpt-4o',object:'model'}]}));return;}
     const body=JSON.parse(text);modelRequests.push(body);modelHeaders.push(req.headers);
+    const texts=body.messages.filter(m=>m.role==='user').map(m=>typeof m.content==='string'?m.content:(m.content||[]).map(p=>p.text||'').join('\n')).join('\n');
+    const workspaceTurn=texts.includes('读取已添加的 PDF 附件');
+    const imageTurn=texts.includes('查看工作区图片');
+    const workspaceId=[...texts.matchAll(/"workspace_id":"([a-f0-9]{32})"/g)].at(-1)?.[1];
+    const unwrap=value=>{if(typeof value==='string'){try{return unwrap(JSON.parse(value))}catch{return value}}if(Array.isArray(value))return value.map(unwrap);if(value?.text)return unwrap(value.text);return value;};
+    const objects=value=>[value,...(Array.isArray(value)?value.flatMap(objects):[])];
+    const listResult=body.messages.find(m=>m.role==='tool'&&m.tool_call_id==='workspace-list');
+    const readResult=body.messages.find(m=>m.role==='tool'&&m.tool_call_id==='workspace-read');
+    const listed=listResult&&objects(unwrap(listResult.content)).find(x=>Array.isArray(x?.entries));
     const name=body.tools?.find(t=>t.function.name.endsWith('excel_statistics'))?.function.name;
     const hasResult=body.messages.some(m=>m.role==='tool');
     res.writeHead(200,{'Content-Type':'text/event-stream'});
     const chunk=(delta,finish_reason=null)=>res.write('data: '+JSON.stringify({id:'synthetic',object:'chat.completion.chunk',created:1,model:'gpt-4o',choices:[{index:0,delta,finish_reason}]})+'\n\n');
     chunk({role:'assistant'});
-    if(name&&!hasResult){chunk({tool_calls:[{index:0,id:'stats1',type:'function',function:{name,arguments:JSON.stringify({snapshotId,column:2})}}]});chunk({},'tool_calls');}
+    if(imageTurn){
+      const imageList=body.messages.find(m=>m.role==='tool'&&m.tool_call_id==='image-list');
+      const imageView=body.messages.find(m=>m.role==='tool'&&m.tool_call_id==='image-view');
+      const target=imageList&&objects(unwrap(imageList.content)).find(x=>Array.isArray(x?.entries))?.entries.find(e=>e.name==='chart.png');
+      if(!imageView){
+        const operation=target?'workspace_view':'workspace_list';
+        const tool=body.tools.find(t=>t.function.name.endsWith('__'+operation));assert(tool&&workspaceId);
+        const name=tool.function.name,args=JSON.stringify({workspace_id:workspaceId,...(target?{file_id:target.id}:{})});
+        // Exercise split tool names and split arguments through the real provider.
+        chunk({tool_calls:[{index:0,id:target?'image-view':'image-list',type:'function',function:{name:name.slice(0,12),arguments:''}}]});
+        chunk({tool_calls:[{index:0,function:{name:name.slice(12),arguments:args.slice(0,18)}}]});
+        chunk({tool_calls:[{index:0,function:{arguments:args.slice(18)}}]});chunk({},'tool_calls');
+      }else{
+        assert(body.messages.some(m=>m.role==='user'&&Array.isArray(m.content)&&m.content.some(p=>p.type==='image_url'&&p.image_url.url.startsWith('data:image/jpeg;base64,'))),'MCP image reaches actual multimodal provider request');
+        chunk({content:'工作区图片已通过视觉消息读取。'});chunk({},'stop');
+      }
+    }else if(workspaceTurn&&!readResult){
+      const target=listed?.entries.find(e=>e.name==='中文附件.pdf');
+      const operation=target?'workspace_read':'workspace_list';
+      const tool=body.tools.find(t=>t.function.name.endsWith('__'+operation));assert(tool&&workspaceId,'Workspace metadata and MCP tools reach the provider');
+      chunk({tool_calls:[{index:0,id:target?'workspace-read':'workspace-list',type:'function',function:{name:tool.function.name,arguments:JSON.stringify({workspace_id:workspaceId,...(target?{file_id:target.id,count:3}:{})})}}]});chunk({},'tool_calls');
+    } else if(workspaceTurn){chunk({content:'已按需读取 PDF 附件：GridPilot PDF attachment verification。'});chunk({},'stop');}
+    else if(name&&!hasResult){chunk({tool_calls:[{index:0,id:'stats1',type:'function',function:{name,arguments:JSON.stringify({snapshotId,column:2})}}]});chunk({},'tool_calls');}
     else {chunk({content:'完整选区统计：合计为 60，来源 销售!B2:B4。'});chunk({},'stop');}
     res.end('data: [DONE]\n\n');
   });
@@ -77,8 +108,8 @@ const server=net.createServer(s=>{
     await page.waitForFunction(()=>!document.querySelector('.gp-menu').open);
     assert(approval.automatic&&approval.approvalScope==='workbook','default opt-in scope is current workbook');
     assert.equal(await page.getByRole('switch',{name:'自动批准'}).evaluate(e=>getComputedStyle(e).color),'rgb(220, 69, 75)','auto approval icon is red');
-    fs.mkdirSync(path.join(root,'docs/v2.1'),{recursive:true});
-    await page.screenshot({path:path.join(root,'docs/v2.1/auto-approval.png')});
+    fs.mkdirSync(path.join(root,'docs/v2.2'),{recursive:true});
+    await page.screenshot({path:path.join(root,'docs/v2.2/auto-approval.png')});
     const webState=await page.locator('#gridpilot-native-web-search').getAttribute('data-enabled');
     await page.getByLabel('Excel工具',{exact:true}).click();await page.getByRole('button',{name:/联网搜索/}).click();
     await page.waitForFunction(previous=>document.getElementById('gridpilot-native-web-search').dataset.enabled!==previous,webState);
@@ -118,16 +149,18 @@ const server=net.createServer(s=>{
     await page.locator('#gridpilot-excel button').filter({hasText:'一键应用'}).click();assert.equal(applied,1);
     const working=page.getByRole('button',{name:'正在应用并保存快照…',exact:true});assert(await working.isDisabled());
     const colors=await working.evaluate(e=>({color:getComputedStyle(e).color,background:getComputedStyle(e).backgroundColor,opacity:getComputedStyle(e).opacity}));assert.equal(colors.color,'rgb(255, 255, 255)');assert.equal(colors.background,'rgb(73, 110, 100)');assert.equal(colors.opacity,'1');
-    fs.mkdirSync(path.join(root,'docs/v2.1'),{recursive:true});await page.locator('#gridpilot-excel').screenshot({path:path.join(root,'docs/v2.1/applying.png')});
+    fs.mkdirSync(path.join(root,'docs/v2.2'),{recursive:true});await page.locator('#gridpilot-excel').screenshot({path:path.join(root,'docs/v2.2/applying.png')});
     await page.waitForFunction(()=>!document.querySelector('#gridpilot-excel .gp-primary'));console.log('PASS clear, high-contrast applying state and finished batch');
     await page.getByLabel('Excel工具',{exact:true}).click();await page.locator('#gridpilot-excel-tools button').filter({hasText:'撤销上次应用'}).click();await page.getByLabel('Excel工具',{exact:true}).click();
     await page.getByLabel('Excel上下文范围').selectOption('selection');
     await page.getByText('选择模型',{exact:true}).click();
     console.log('Model menu:',(await page.locator('body').innerText()).slice(-1800));
     await page.getByText('GPT-4o',{exact:true}).last().click();
+    const draftWorkspace=await page.evaluate(()=>window.gridpilotFiles.context(window.gridpilotWorkspaceSession()));
     await page.locator('#message-input').fill('统计当前选区B列的合计，使用Excel统计工具。');
     await page.locator('#message-input').press('Enter');
     await page.getByText('完整选区统计：合计为 60，来源 销售!B2:B4。',{exact:false}).first().waitFor();
+    const sentWorkspace=await page.evaluate(()=>window.gridpilotFiles.context(window.gridpilotWorkspaceSession()));assert.equal(sentWorkspace.workspace_id,draftWorkspace.workspace_id,'first actual send keeps the workspace identity');
     assert(modelRequests.some(r=>JSON.stringify(r.messages).includes(snapshotId)));
     assert(modelRequests.some(r=>r.messages.some(m=>m.role==='tool')),'native model tool loop returned full statistics');
     assert(modelHeaders.every(h=>h.authorization==='Bearer synthetic-test-only'));assert(modelHeaders.every(h=>!/gridpilot/i.test(h['user-agent']||'')));
@@ -151,13 +184,22 @@ const server=net.createServer(s=>{
     await page.locator('#message-input').press('Enter');
     await page.waitForFunction(()=>!document.querySelector('#message-input').value,{timeout:30000});
     await page.waitForTimeout(300);
-    assert(modelRequests.some(r=>JSON.stringify(r.messages).includes('GridPilot PDF attachment verification')),'native model receives parsed PDF text');
-    console.log('PASS native TXT/PDF/DOCX parsing, Unicode picker path, PDF message through Chatbox provider');
-    fs.mkdirSync(path.join(root,'docs/v2.1'),{recursive:true});
-    await page.screenshot({animations:'disabled',path:path.join(root,'docs/v2.1/chatbox-window.png')});
+    await page.getByText('已按需读取 PDF 附件：GridPilot PDF attachment verification。',{exact:false}).first().waitFor();
+    assert(modelRequests.some(r=>r.messages.some(m=>m.role==='tool'&&JSON.stringify(m).includes('GridPilot PDF attachment verification'))),'native model receives PDF via a real workspace MCP read');
+    console.log('PASS Unicode picker, reference-only attachment, real workspace stdio list/read loop, complete PDF text through Chatbox provider');
+    await application.evaluate(({dialog},file)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[file]});},path.join(root,'.temp/workspace-tests/references/chart.png'));
+    await page.locator('gridpilot-workspace #trigger').click();await page.locator('gridpilot-workspace #add').click();
+    await page.locator('gridpilot-workspace .name').filter({hasText:'chart.png'}).waitFor();
+    await page.screenshot({path:path.join(root,'docs/v2.2/actual-workspace.png')});
+    await page.locator('gridpilot-workspace #close').click();
+    await page.locator('#message-input').fill('查看工作区图片，实际调用图片工具。');await page.locator('#message-input').press('Enter');
+    await page.getByText('工作区图片已通过视觉消息读取。',{exact:false}).first().waitFor();
+    console.log('PASS actual chooser, workspace_view, split streaming tool names/arguments, standard MCP image and multimodal provider payload');
+    fs.mkdirSync(path.join(root,'docs/v2.2'),{recursive:true});
+    await page.screenshot({animations:'disabled',path:path.join(root,'docs/v2.2/chatbox-window.png')});
     await application.evaluate(({BrowserWindow})=>{const w=BrowserWindow.getAllWindows()[0];w.setSize(480,850);w.webContents.send('gridpilot:mode','sidebar');});
     await page.waitForFunction(()=>document.getElementById('gridpilot-excel')?.dataset.mode==='sidebar');
-    await page.screenshot({animations:'disabled',path:path.join(root,'docs/v2.1/chatbox-narrow.png')});
+    await page.screenshot({animations:'disabled',path:path.join(root,'docs/v2.2/chatbox-narrow.png')});
     const overflow=await page.locator('#gridpilot-excel').evaluate(e=>e.scrollWidth>e.clientWidth+2);assert.equal(overflow,false);
     await application.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].setSize(1100,850));
     await application.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].webContents.send('navigate-to','/settings/provider'));
@@ -165,7 +207,7 @@ const server=net.createServer(s=>{
     await page.getByText('API 密钥',{exact:true}).waitFor();
     await page.waitForTimeout(400); // Native modal transition, before the documentation screenshot.
     console.log('Native settings:',(await page.locator('body').innerText()).slice(-1500));
-    await page.screenshot({animations:'disabled',path:path.join(root,'docs/v2.1/chatbox-settings.png')});
+    await page.screenshot({animations:'disabled',path:path.join(root,'docs/v2.2/chatbox-settings.png')});
     assert.deepEqual(errors,[]);
     console.log('PASS official native UI, Chinese draft, context opt-out, full-scope MCP, stdio transport, proposal/apply/undo, narrow layout');
   }finally{if(mcpClient)await mcpClient.close();if(application)await application.close();socket?.destroy();server.close();modelServer.close();}
