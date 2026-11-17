@@ -34,8 +34,20 @@ patch('dist/renderer/js/index.TlLbGKvw.js',
   'maxContextMessageCount:nu.maxContextMessageCount});const yu=[];',
   'maxContextMessageCount:nu.maxContextMessageCount});ku=window.gridpilotExcel.expandMessages(ku,eu);const yu=[];');
 patch('dist/renderer/js/InputBox.DH3jG147.js',
-  'rr.knowledgeBase&&!M&&o.jsx(Bo,{currentKnowledgeBaseId:de?.id,onSelect:nn,',
-  'o.jsx("span",{id:"gridpilot-toolbar-slot"}),rr.knowledgeBase&&!M&&o.jsx(Bo,{currentKnowledgeBaseId:de?.id,onSelect:nn,');
+  'o.jsxs(R,{align:"center",gap:0,className:"shrink-0 w-full",justify:"space-between",children:[o.jsx(Lr,',
+  'o.jsx("div",{id:"gridpilot-toolbar-slot","aria-label":"资料与 Excel 上下文"}),o.jsxs(R,{align:"center",gap:0,className:"shrink-0 w-full gridpilot-native-toolbar",justify:"space-between",children:[o.jsx(Lr,');
+patch('dist/renderer/js/InputBox.DH3jG147.js',
+  'o.jsxs(Xe,{pt:0,pb:M?"md":"sm",px:"sm",id:tr,...en(),',
+  'o.jsxs(Xe,{pt:0,pb:6,px:"sm",id:tr,...en(),');
+patch('dist/renderer/js/InputBox.DH3jG147.js',
+  'rounded-md bg-chatbox-background-secondary justify-between px-3 py-2',
+  'rounded-md bg-chatbox-background-secondary justify-between px-3 py-2 gridpilot-composer');
+patch('dist/renderer/js/InputBox.DH3jG147.js',
+  'autosize:!0,minRows:2,maxRows:Math.max(4,Math.floor(st/100))',
+  'autosize:!0,minRows:1,maxRows:Math.max(4,Math.floor(st/100))');
+patch('dist/renderer/js/Disclaimer.D-whLJax.js',
+  'function o(){const{t:e}=r();return t.jsx(a,{className:"disclaimer-safe-area",size:"xs",c:"dimmed",ta:"center",children:e("AI-generated content may be inaccurate. Please verify important information.")})}',
+  'function o(){return null}');
 patch('dist/renderer/js/InputBox.DH3jG147.js',
   'onClick:()=>{$e(!ye),Ye()},className:',
   'id:"gridpilot-native-web-search","data-enabled":String(ye),onClick:()=>{$e(!ye),Ye()},className:');

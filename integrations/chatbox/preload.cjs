@@ -46,7 +46,7 @@
   function closeMenu(){const menu=toolbar?.querySelector('.gp-menu');if(menu)menu.open=false;}
   async function run(fn,label='正在处理…'){
     closeMenu();if(busy)return;busy=true;busyLabel=label;status=label;failed=false;render();
-    try{const r=await fn();if(r?.checkpoint)checkpoint=r.checkpoint;status=r?.message||'已完成';return r;}catch(e){failed=true;status=e.message.replace(/^Error invoking remote method.*?Error: /,'');}
+    try{const r=await fn();if(r?.checkpoint)checkpoint=r.checkpoint;status=r?.mode?'':r?.message||'已完成';return r;}catch(e){failed=true;status=e.message.replace(/^Error invoking remote method.*?Error: /,'');}
     finally{busy=false;busyLabel='';render();}
   }
   function prompt(text){
@@ -142,11 +142,22 @@
 .gp-progress{position:relative;padding:2px 0 5px;font-size:11px;color:var(--chatbox-tint-secondary,#687c77)}.gp-progress>button{position:absolute;right:0;top:-3px;font-size:11px!important}.gp-progress span{display:block;padding-right:34px;margin-bottom:5px}.gp-progress progress{display:block;width:100%;height:3px;border:0;border-radius:9px;overflow:hidden;accent-color:#23866e}.gp-progress progress::-webkit-progress-bar{background:#24856e16}.gp-progress progress::-webkit-progress-value{background:linear-gradient(90deg,#68bdad,#23866e);border-radius:9px;transition:width .2s}.gp-progress progress:indeterminate{background:linear-gradient(90deg,#24856e10 0%,#56b69d 50%,#24856e10 100%);background-size:200% 100%;animation:gp-loading 1.6s linear infinite}@keyframes gp-loading{to{background-position:-200% 0}}@media(prefers-reduced-motion:reduce){.gp-progress progress{animation:none!important}}
 @supports(appearance:base-select){#gridpilot-excel-tools select,#gridpilot-excel-tools select::picker(select){appearance:base-select}#gridpilot-excel-tools select::picker(select){border:1px solid #899b9830;border-radius:11px;padding:5px;box-shadow:0 8px 24px #10241c18;background:var(--chatbox-background-primary,#fff);color:var(--chatbox-tint-primary,#263c35)}#gridpilot-excel-tools option{padding:7px 11px;border-radius:6px;font-size:12px}#gridpilot-excel-tools option:checked{background:#23866e16;color:#237e68}#gridpilot-excel-tools option:hover{background:#899b9815}#gridpilot-excel-tools select::picker-icon{margin-inline-start:7px;font-size:9px}}
 
-      #gridpilot-excel-tools{display:inline-flex;align-items:center;gap:2px;flex-shrink:0;font:12px system-ui;color:var(--chatbox-tint-secondary);position:relative}
+      /* Keep reference/context controls on their own row. The native React toolbar
+         owns attachment and model controls; never squeeze injected controls into it. */
+      .gridpilot-composer{gap:6px!important}
+      #gridpilot-toolbar-slot{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px 12px;width:100%;min-width:0;box-sizing:border-box;padding:6px 2px 0;border-top:1px solid #899b9826}
+      #gridpilot-toolbar-slot>gridpilot-workspace{flex:0 0 auto}
+      #gridpilot-excel-tools{display:inline-flex;align-items:center;gap:4px;flex:0 0 auto;margin-left:auto;font:12px system-ui;color:var(--chatbox-tint-secondary);position:relative;min-height:32px}
+      .gridpilot-native-toolbar{column-gap:8px!important;row-gap:6px!important;flex-wrap:wrap!important;min-width:0}
+      .gridpilot-native-toolbar>div{min-width:0}
+      .gridpilot-native-toolbar>div:last-child{flex:1 1 220px;justify-content:flex-end}
+      .gridpilot-native-toolbar .truncate{max-width:160px!important}
+      #gridpilot-excel-tools>select{min-height:32px}
+      #gridpilot-excel-tools .gp-menu>summary{display:grid;place-items:center;min-width:30px;min-height:30px;padding:0}
       #gridpilot-excel-tools select,#gridpilot-excel-tools summary{font:inherit;color:inherit;background:transparent;border:0;border-radius:7px;padding:5px;cursor:pointer}
       #gridpilot-excel-tools select{max-width:92px;white-space:nowrap}#gridpilot-excel-tools select option{background:var(--chatbox-background-primary,#fff);color:var(--chatbox-tint-primary,#263c35)}
       #gridpilot-excel-tools summary{list-style:none}#gridpilot-excel-tools summary:hover{background:var(--chatbox-background-tertiary,#f1f5f3)}
-      .gp-menu>.gp-popup{position:absolute;bottom:32px;left:0;z-index:999;width:210px;background:var(--chatbox-background-primary,#fff);color:var(--chatbox-tint-primary,#263c35);border:1px solid #899b982f;box-shadow:0 8px 28px #0002;border-radius:12px;padding:8px;max-height:50vh;overflow:auto}
+      .gp-menu>.gp-popup{position:absolute;bottom:38px;right:0;z-index:999;width:min(240px,calc(100vw - 48px));box-sizing:border-box;background:var(--chatbox-background-primary,#fff);color:var(--chatbox-tint-primary,#263c35);border:1px solid #899b982f;box-shadow:0 8px 28px #0002;border-radius:12px;padding:8px;max-height:50vh;overflow:auto}
       .gp-popup>button{display:block;width:100%;box-sizing:border-box;text-align:left;padding:8px}.gp-popup input,.gp-popup textarea{width:100%;max-width:100%;font:inherit;border:1px solid #899b9840;background:transparent;color:inherit;margin:4px 0;padding:5px;border-radius:5px}
       #gridpilot-excel{font:12px/1.5 system-ui;color:inherit;border-top:1px solid #899b9826;margin-top:4px;padding:5px 0;overflow-wrap:anywhere}
       #gridpilot-excel[hidden]{display:none}#gridpilot-excel .gp-row{display:flex;gap:8px;align-items:start;justify-content:space-between}#gridpilot-excel .gp-row>details{flex:1;min-width:0}

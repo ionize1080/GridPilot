@@ -102,6 +102,7 @@ const server=net.createServer(s=>{
     console.log('Native Chatbox ready',await page.locator('body').innerText().then(s=>s.slice(0,1200)));
     assert.equal(await page.locator('#gridpilot-excel').isVisible(),false,'idle integration uses no extra panel');
     assert(await page.locator('#gridpilot-toolbar-slot #gridpilot-excel-tools').count());
+    if(process.env.GRIDPILOT_LAYOUT_TEST==='1'){await require('./composer-layout.cjs')(page,application,root);return;}
     assert(await page.getByRole('switch',{name:'自动批准'}).isVisible(),'approval is visible without opening More');
     assert.equal(await page.locator('#gridpilot-native-web-search').isVisible(),false,'network action moved out of toolbar');
     await page.getByRole('switch',{name:'自动批准'}).click();
